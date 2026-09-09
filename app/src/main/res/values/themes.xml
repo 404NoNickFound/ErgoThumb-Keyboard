@@ -3,7 +3,7 @@
     <style name="Base.Theme.ThumbGridTest" parent="Theme.Material3.DayNight.NoActionBar">
         <!-- Customize your light theme here. -->
         <!-- <item name="colorPrimary">@color/my_light_primary</item> -->
+        <item name="android:forceDarkAllowed" tools:ignore="NewApi">false</item>
     </style>
-
-    <style name="Theme.ThumbGridTest" parent="Base.Theme.ThumbGridTest" />
+    <style name="Theme.ThumbGridTest" parent="Base.Theme.ThumbGridTest"/>
 </resources>

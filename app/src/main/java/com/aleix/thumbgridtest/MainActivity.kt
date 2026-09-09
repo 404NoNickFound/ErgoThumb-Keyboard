@@ -8,6 +8,7 @@ import android.content.res.Configuration
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.Typeface
 import android.inputmethodservice.InputMethodService
@@ -24,16 +25,15 @@ import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.widget.Button
 import android.widget.CheckBox
-import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.AppCompatEditText
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.hypot
-import androidx.appcompat.widget.AppCompatEditText
 
 object Prefs {
     const val NAME = "thumbgrid_prefs"
@@ -60,6 +60,13 @@ object Prefs {
     const val KEY_MARGIN_INDEP = "margin_indep"
     const val KEY_MARGIN_BOTTOM = "margin_bottom"
 
+    const val KEY_ANIM_STRONG = "anim_strong"
+    const val KEY_ANIM_DEPTH = "anim_depth"
+    const val KEY_ANIM_HELP = "anim_help"
+    const val KEY_ANIM_TRACE = "anim_trace"
+    const val KEY_ANIM_SCALE = "anim_scale"
+    const val KEY_VMAX = "vmax_cps"
+    const val KEY_CASE_MS = "case_ms"
     const val DEFAULT_HEIGHT = 0.35f
     const val DEFAULT_GAP = 0.10f
     const val DEFAULT_THRESHOLD_DP = 24f
@@ -69,6 +76,9 @@ object Prefs {
     const val DEFAULT_FLICK_MS = 180f
     const val DEFAULT_MARGIN_SIDE = 0f
     const val DEFAULT_MARGIN_BOTTOM = 12f
+    const val DEFAULT_ANIM_SCALE = 100f
+    const val DEFAULT_VMAX = 20f
+    const val DEFAULT_CASE_MS = 260f
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences(NAME, Context.MODE_PRIVATE)
 
@@ -97,6 +107,14 @@ object Prefs {
         else marginSide(ctx)
     fun marginBottom(ctx: Context) = prefs(ctx).getFloat(KEY_MARGIN_BOTTOM, DEFAULT_MARGIN_BOTTOM)
 
+    fun animStrong(ctx: Context) = prefs(ctx).getBoolean(KEY_ANIM_STRONG, true)
+    fun animDepth(ctx: Context) = prefs(ctx).getBoolean(KEY_ANIM_DEPTH, true)
+    fun animHelp(ctx: Context) = prefs(ctx).getBoolean(KEY_ANIM_HELP, true)
+    fun animTrace(ctx: Context) = prefs(ctx).getBoolean(KEY_ANIM_TRACE, false)
+    fun animScale(ctx: Context) = prefs(ctx).getFloat(KEY_ANIM_SCALE, DEFAULT_ANIM_SCALE)
+    fun vmax(ctx: Context) = prefs(ctx).getFloat(KEY_VMAX, DEFAULT_VMAX)
+    fun caseMs(ctx: Context) = prefs(ctx).getFloat(KEY_CASE_MS, DEFAULT_CASE_MS)
+
     fun langs(ctx: Context): List<String> =
         (prefs(ctx).getString(KEY_LANGS, "ca,es,en") ?: "ca,es,en")
             .split(",").map { it.trim() }.filter { it in Layouts.CODES }
@@ -112,7 +130,6 @@ object Prefs {
     }
 }
 
-/** Barreja lineal de dos colors ARGB. */
 fun blendColor(a: Int, b: Int, t: Float): Int {
     val ar = (a shr 16) and 0xFF; val ag = (a shr 8) and 0xFF; val ab = a and 0xFF
     val br = (b shr 16) and 0xFF; val bg = (b shr 8) and 0xFF; val bb = b and 0xFF
@@ -122,10 +139,6 @@ fun blendColor(a: Int, b: Int, t: Float): Int {
     return (0xFF shl 24) or (r shl 16) or (g shl 8) or bl
 }
 
-/**
- * Motor de temes: rampa de 4 passos des del color principal cap al pol del mode
- * (negre en fosc, blanc en clar), amb rols assignats per fracció de barreja.
- */
 object Themes {
     const val BG = 0; const val KEYCAP = 1; const val SPECIAL = 2
     const val SLIDER = 3; const val KNOB = 4; const val STRIP = 5
@@ -180,7 +193,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var dualGridView: DualGridView
     private lateinit var editText: SelEditText
 
-    /** EditText que avisa quan canvia la selecció, per refrescar la preview de majúscules. */
     private inner class SelEditText(ctx: Context) : AppCompatEditText(ctx) {
         var onSel: (() -> Unit)? = null
         override fun onSelectionChanged(selStart: Int, selEnd: Int) {
@@ -291,7 +303,6 @@ class MainActivity : AppCompatActivity() {
         setContentView(root)
     }
 
-    /** Onboarding: tria d'idioma inicial (teclat + locale de la app). */
     private fun buildChooser(): View {
         val lay = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -441,16 +452,24 @@ class SettingsActivity : AppCompatActivity() {
         slider("Temps de doble acció", 150, 700, Prefs.doubleMs(this).toInt(),
             { "$it ms" })
         { v -> prefs.edit().putFloat(Prefs.KEY_DOUBLE_MS, v.toFloat()).apply() }
-        slider("Sensibilitat del cursor", 5, 60, Prefs.sensChars(this).toInt(),
+        slider("Sensibilitat del cursor (mapa directe)", 5, 60, Prefs.sensChars(this).toInt(),
             { "$it caràcters per lliscada" })
         { v -> prefs.edit().putFloat(Prefs.KEY_SENS_CHARS, v.toFloat()).apply() }
+        slider("Velocitat màxima del desplaçament continu", 5, 40, Prefs.vmax(this).toInt(),
+            { "$it caràcters/s" })
+        { v -> prefs.edit().putFloat(Prefs.KEY_VMAX, v.toFloat()).apply() }
         slider("Sensibilitat d'esborrat", 2, 30, Prefs.sensErase(this).toInt(),
             { "$it caràcters per lliscada" })
         { v -> prefs.edit().putFloat(Prefs.KEY_SENS_ERASE, v.toFloat()).apply() }
         slider("Finestra de flick", 80, 400, Prefs.flickMs(this).toInt(),
             { "$it ms" })
         { v -> prefs.edit().putFloat(Prefs.KEY_FLICK_MS, v.toFloat()).apply() }
-
+        slider("Temps d'animacions", 50, 200, Prefs.animScale(this).toInt(),
+            { "$it%" })
+        { v -> prefs.edit().putFloat(Prefs.KEY_ANIM_SCALE, v.toFloat()).apply() }
+        slider("Durada de l'empenyiment de caixa", 0, 500, Prefs.caseMs(this).toInt(),
+            { if (it < 150) "instantani (<150 ms)" else "$it ms" })
+        { v -> prefs.edit().putFloat(Prefs.KEY_CASE_MS, v.toFloat()).apply() }
         root.addView(CheckBox(this).apply {
             text = "Majúscula automàtica"
             setTextColor(Color.WHITE)
@@ -481,6 +500,38 @@ class SettingsActivity : AppCompatActivity() {
             isChecked = Prefs.showHints(this@SettingsActivity)
             setOnCheckedChangeListener { _, c ->
                 prefs.edit().putBoolean(Prefs.KEY_SHOW_HINTS, c).apply()
+            }
+        })
+        root.addView(CheckBox(this).apply {
+            text = "Animacions fortes (transicions i lliscats)"
+            setTextColor(Color.WHITE)
+            isChecked = Prefs.animStrong(this@SettingsActivity)
+            setOnCheckedChangeListener { _, c ->
+                prefs.edit().putBoolean(Prefs.KEY_ANIM_STRONG, c).apply()
+            }
+        })
+        root.addView(CheckBox(this).apply {
+            text = "Efectes de profunditat (blob, ombres, enfosquiment, spring)"
+            setTextColor(Color.WHITE)
+            isChecked = Prefs.animDepth(this@SettingsActivity)
+            setOnCheckedChangeListener { _, c ->
+                prefs.edit().putBoolean(Prefs.KEY_ANIM_DEPTH, c).apply()
+            }
+        })
+        root.addView(CheckBox(this).apply {
+            text = "Ajuda visual (flash i substitució de caràcter)"
+            setTextColor(Color.WHITE)
+            isChecked = Prefs.animHelp(this@SettingsActivity)
+            setOnCheckedChangeListener { _, c ->
+                prefs.edit().putBoolean(Prefs.KEY_ANIM_HELP, c).apply()
+            }
+        })
+        root.addView(CheckBox(this).apply {
+            text = "Mostra la traça del gest (línia guia)"
+            setTextColor(Color.WHITE)
+            isChecked = Prefs.animTrace(this@SettingsActivity)
+            setOnCheckedChangeListener { _, c ->
+                prefs.edit().putBoolean(Prefs.KEY_ANIM_TRACE, c).apply()
             }
         })
         root.addView(CheckBox(this).apply {
@@ -661,20 +712,16 @@ class ThumbImeService : InputMethodService() {
 
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
-
-        // Fallback d'onboarding: IME activat sense haver obert mai l'app.
         if (!Prefs.onboarded(this)) {
             val sys = resources.configuration.locales.get(0)?.language ?: "ca"
             val code = if (sys in Layouts.CODES) sys else "ca"
             Prefs.setLang(this, code)
             Prefs.setOnboarded(this, true)
         }
-
         gridView?.reloadPrefs()
         gridView?.sensitiveField = isSensitiveField(info)
     }
 
-    /** Refresc de la preview de majúscula quan el cursor canvia de lloc. */
     override fun onUpdateSelection(
         oldSelStart: Int, oldSelEnd: Int,
         newSelStart: Int, newSelEnd: Int,
@@ -711,6 +758,7 @@ class DualGridView(context: Context) : View(context) {
     private enum class GridSide { LEFT, RIGHT }
     private enum class Zone { LEFT, RIGHT, SPACE, BAR, SLIDER, CAPSULE }
     private enum class ShiftMode { OFF, ONCE, CAPS }
+    private enum class Icon { SHIFT, CAPS, ENTER, BACK, REDO }
 
     private val barPages = listOf(
         listOf("0", "1", "2", "3", "4", "5", "6", "7", "8", "9"),
@@ -740,20 +788,59 @@ class DualGridView(context: Context) : View(context) {
         var deleted: Int = 0,
         var redone: Int = 0,
         var edgeRunnable: Runnable? = null,
-        var edgeInterval: Long = 120L
+        var edgeInterval: Long = 120L,
+        var knobDrag: Boolean = false,
+        var grabX: Float = 0f,
+        var knobP: Float = 0f
     )
+
+    private class PressAnim(
+        val side: GridSide, val row: Int, val col: Int,
+        val start: Long, var release: Long = -1L,
+        var sel: SwipeDir = SwipeDir.TAP
+    )
+
+    private class FeedbackAnim(
+        val side: GridSide?, val row: Int, val col: Int,
+        val pill: Boolean, val char: String, val start: Long
+    )
+
+    private class GlyphSlide(val icon: Icon, val dir: SwipeDir, val start: Long)
 
     private val activePointers = mutableMapOf<Int, PointerState>()
     private val undoStack = ArrayDeque<String>()
     private val handler = Handler(Looper.getMainLooper())
 
+    private val presses = mutableMapOf<Int, PressAnim>()
+    private val fadingPresses = mutableListOf<PressAnim>()
+    private val feedbacks = mutableListOf<FeedbackAnim>()
+    private val slides = mutableListOf<GlyphSlide>()
+
     private var barVisible = false
     private var barPage = 0
+    private var barP = 0f
+    private var barTarget = 0f
+    private var barAnimStart = 0L
+    private var barAnimFrom = 0f
 
     private var shiftMode = ShiftMode.OFF
     private var lastUpSwipeTime = 0L
     private var lastCenterTapTime = 0L
     private var lastLetter: String? = null
+
+    private var lastCapsVisual = false
+    private var caseAnimStart = -1L
+    private var caseFromUpper = false
+
+    private var capsuleAnimStart = -1L
+    private var capsuleOld = ""
+
+    private var knobP = 0f
+    private var knobSpringStart = -1L
+    private var knobSpringFrom = 0f
+    private var tickOffset = 0f
+    private var pillDownSince = -1L
+    private var pillReleasedAt = -1L
 
     private var heightFraction = Prefs.height(context)
     private var gapFraction = Prefs.gap(context)
@@ -770,13 +857,25 @@ class DualGridView(context: Context) : View(context) {
     private var marginLeftPct = Prefs.marginLeft(context)
     private var marginRightPct = Prefs.marginRight(context)
     private var marginBottomPct = Prefs.marginBottom(context)
+    private var animStrong = Prefs.animStrong(context)
+    private var animDepth = Prefs.animDepth(context)
+    private var animHelp = Prefs.animHelp(context)
+    private var animTrace = Prefs.animTrace(context)
+    private var animScale = Prefs.animScale(context) / 100f
+    private var vmax = Prefs.vmax(context)
+    private var caseMs = Prefs.caseMs(context)
     private var lang = Prefs.lang(context)
     private var layout = Layouts.forLang(lang)
     private var theme = Themes.current(context)
 
-    // Escala de disseny: el llenç de referència fa 430 unitats d'amplada.
     private var scale = 1f
     private fun px(v: Float) = v * scale * resources.displayMetrics.density
+    private fun dur(base: Long) = if (animScale <= 0f) 0L else (base * animScale).toLong()
+    private fun blobDelay() = dur(90)
+    private fun fbDur() = dur(500)
+    private fun slideDur() = dur(350)
+    private fun caseDur(): Long = if (caseMs < 150f) 0L else dur(caseMs.toLong())
+    private fun glyphColor() = if (theme.isDark) Color.WHITE else Color.BLACK
 
     private val fontRegular: Typeface by lazy { loadFont("outfit_400.ttf") }
     private val fontMedium: Typeface by lazy { loadFont("outfit_500.ttf") }
@@ -804,6 +903,13 @@ class DualGridView(context: Context) : View(context) {
         marginLeftPct = Prefs.marginLeft(context)
         marginRightPct = Prefs.marginRight(context)
         marginBottomPct = Prefs.marginBottom(context)
+        animStrong = Prefs.animStrong(context)
+        animDepth = Prefs.animDepth(context)
+        animHelp = Prefs.animHelp(context)
+        animTrace = Prefs.animTrace(context)
+        animScale = Prefs.animScale(context) / 100f
+        vmax = Prefs.vmax(context)
+        caseMs = Prefs.caseMs(context)
         lang = Prefs.lang(context)
         layout = Layouts.forLang(lang)
         theme = Themes.current(context)
@@ -833,10 +939,48 @@ class DualGridView(context: Context) : View(context) {
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         activePointers.keys.toList().forEach { stopEdgeRepeat(it) }
+        handler.removeCallbacks(animLoop)
+    }
+
+    private fun cubicOut(t: Float): Float {
+        val u = 1f - t.coerceIn(0f, 1f)
+        return 1f - u * u * u
+    }
+
+    private fun t01(start: Long, durMs: Long, now: Long): Float {
+        if (durMs <= 0L) return 1f
+        return ((now - start).toFloat() / durMs).coerceIn(0f, 1f)
+    }
+
+    private val animLoop = object : Runnable {
+        override fun run() {
+            invalidate()
+            if (anyAnimActive(SystemClock.uptimeMillis())) {
+                handler.postDelayed(this, 16L)
+            }
+        }
+    }
+
+    private fun kickAnim() {
+        handler.removeCallbacks(animLoop)
+        handler.post(animLoop)
+    }
+
+    private fun anyAnimActive(now: Long): Boolean {
+        if (presses.isNotEmpty()) return true
+        if (fadingPresses.any { t01(it.release, fbDur(), now) < 1f }) return true
+        if (feedbacks.any { t01(it.start, fbDur(), now) < 1f }) return true
+        if (slides.any { t01(it.start, slideDur(), now) < 1f }) return true
+        if (barAnimStart >= 0L && t01(barAnimStart, dur(200), now) < 1f) return true
+        if (caseAnimStart >= 0L && t01(caseAnimStart, caseDur(), now) < 1f) return true
+        if (capsuleAnimStart >= 0L && t01(capsuleAnimStart, dur(150), now) < 1f) return true
+        if (knobSpringStart >= 0L && t01(knobSpringStart, dur(200), now) < 1f) return true
+        if (activePointers.values.any { it.knobDrag }) return true
+        return false
     }
 
     private data class Geo(
-        val barHeight: Float, val sliderZone: Float,
+        val stripH: Float, val sliderZone: Float,
         val sliderTop: Float, val sliderH: Float,
         val gridTop: Float,
         val rowH: Float, val colW: Float, val gapU: Float,
@@ -848,11 +992,11 @@ class DualGridView(context: Context) : View(context) {
 
     private fun geo(): Geo {
         val padH = px(8f); val padV = px(8f); val gapU = px(8f)
-        val barHeight = if (barVisible) px(48f) else 0f
+        val stripH = px(48f)
         val sliderZone = px(64f)
         val sliderH = px(32f)
-        val gridTop = barHeight
-        val gridH = height - barHeight - sliderZone
+        val gridTop = barP * stripH
+        val gridH = height - gridTop - sliderZone
         val contentLeft = width * (marginLeftPct / 100f)
         val contentWidth = width - contentLeft - width * (marginRightPct / 100f)
         val avail = contentWidth - 2 * padH
@@ -863,9 +1007,9 @@ class DualGridView(context: Context) : View(context) {
         val gapRight = gapLeft + pillW
         val rowH = (gridH - 2 * padV - 2 * gapU) / 3f
         val sliderTop = height - sliderZone + (sliderZone - sliderH) / 2f
-        val capsuleH = px(20f)
-        val capsuleTop = height - sliderZone + ((sliderZone - sliderH) / 2f - capsuleH) / 2f
-        return Geo(barHeight, sliderZone, sliderTop, sliderH, gridTop, rowH, colW, gapU,
+        val capsuleH = (sliderZone - sliderH) / 2f
+        val capsuleTop = height - sliderZone
+        return Geo(stripH, sliderZone, sliderTop, sliderH, gridTop, rowH, colW, gapU,
             padH, padV, gapLeft, gapRight, pillW, contentLeft, contentWidth,
             capsuleTop, capsuleH)
     }
@@ -890,10 +1034,12 @@ class DualGridView(context: Context) : View(context) {
         val enabled = Prefs.langs(context)
         if (enabled.isEmpty()) return
         val idx = enabled.indexOf(lang).coerceAtLeast(0)
+        capsuleOld = lang
+        capsuleAnimStart = SystemClock.uptimeMillis()
         lang = enabled[(idx + 1) % enabled.size]
         layout = Layouts.forLang(lang)
         Prefs.setLang(context, lang)
-        invalidate()
+        kickAnim()
     }
 
     private fun shouldAutoCap(): Boolean {
@@ -912,7 +1058,7 @@ class DualGridView(context: Context) : View(context) {
         }
     }
 
-    private fun commitChar(raw: String) {
+    private fun commitChar(raw: String): String {
         var out = raw
         if (out.length == 1 && out[0].isLetter()) {
             val upper = shiftMode != ShiftMode.OFF || shouldAutoCap()
@@ -923,7 +1069,6 @@ class DualGridView(context: Context) : View(context) {
         if (autoSpace && out.length == 1 && out[0] in autoSpaceChars) {
             textTarget?.commit(" ")
         }
-        // Escriure text nou invalida l'historial de refer (com qualsevol editor)
         undoStack.clear()
         if (bigramsEnabled && !sensitiveField && out.length == 1 && out[0].isLetter()) {
             val cur = out.lowercase()
@@ -933,7 +1078,17 @@ class DualGridView(context: Context) : View(context) {
             lastLetter = null
         }
         invalidate()
+        return out
     }
+
+    private fun spawnFeedback(side: GridSide?, row: Int, col: Int, pill: Boolean, char: String) {
+        if (!animHelp) return
+        feedbacks.add(FeedbackAnim(side, row, col, pill, char, SystemClock.uptimeMillis()))
+        kickAnim()
+    }
+
+    private fun cellFeedback(side: GridSide, row: Int, col: Int): FeedbackAnim? =
+        feedbacks.firstOrNull { !it.pill && it.side == side && it.row == row && it.col == col }
 
     private fun startEdgeRepeat(id: Int, leftward: Boolean) {
         val state = activePointers[id] ?: return
@@ -962,24 +1117,89 @@ class DualGridView(context: Context) : View(context) {
         activePointers[id]?.edgeRunnable = null
     }
 
-    /** Ombra suau falsa (3 capes) compatible amb acceleració per hardware. */
-    private fun drawSoftShadow(canvas: Canvas, r: RectF, radius: Float) {
-        val alphas = intArrayOf(0x14, 0x0F, 0x0A)
-        for (i in alphas.indices) {
-            val dy = px(2f) * (i + 1)
-            val grow = px(1f) * i
-            shadowPaint.color = theme.shadowColor
-            shadowPaint.alpha = alphas[i]
-            canvas.drawRoundRect(
-                r.left - grow, r.top - grow + dy,
-                r.right + grow, r.bottom + grow + dy,
-                radius, radius, shadowPaint
-            )
+    private fun knobCenterX(g: Geo): Float = g.contentLeft + g.contentWidth / 2f
+    private fun knobD(g: Geo): Float = px(40f)
+    private fun knobTravel(g: Geo): Float {
+        val inner = g.contentWidth - 2 * px(16f)
+        return inner / 2f - knobD(g) / 2f
+    }
+
+    private fun sliderMove(n: Int) {
+        if (n == 0) return
+        textTarget?.moveCursor(n, cursorWord)
+        tickOffset += n * px(12f)
+    }
+
+    private fun drawIcon(
+        c: Canvas, ic: Icon, cx: Float, cy: Float, s: Float,
+        withBase: Boolean = false, alpha: Int = 255
+    ) {
+        val col = iconColor()
+        if (withBase) {
+            iconBasePaint.color = blendColor(theme.role[Themes.KEYCAP], col, 0.30f)
+            iconBasePaint.alpha = (alpha * 0.85f).toInt()
+            c.drawCircle(cx, cy, s * 0.78f, iconBasePaint)
         }
+        iconPaint.color = col
+        iconPaint.alpha = alpha
+        iconPaint.strokeWidth = s * 0.10f
+        val h = s / 2f
+        val path = Path()
+        when (ic) {
+            Icon.SHIFT, Icon.CAPS -> {
+                val lift = if (ic == Icon.CAPS) -h * 0.35f else 0f
+                path.moveTo(cx, cy - h + lift)
+                path.lineTo(cx - h * 0.7f, cy - h * 0.1f + lift)
+                path.lineTo(cx - h * 0.35f, cy - h * 0.1f + lift)
+                path.lineTo(cx - h * 0.35f, cy + h * 0.6f + lift)
+                path.lineTo(cx + h * 0.35f, cy + h * 0.6f + lift)
+                path.lineTo(cx + h * 0.35f, cy - h * 0.1f + lift)
+                path.lineTo(cx + h * 0.7f, cy - h * 0.1f + lift)
+                path.close()
+                c.drawPath(path, iconPaint)
+                if (ic == Icon.CAPS) {
+                    c.drawLine(cx - h * 0.7f, cy + h, cx + h * 0.7f, cy + h, iconPaint)
+                }
+            }
+            Icon.ENTER -> {
+                path.moveTo(cx + h * 0.6f, cy - h)
+                path.lineTo(cx + h * 0.6f, cy + h * 0.2f)
+                path.lineTo(cx - h * 0.7f, cy + h * 0.2f)
+                c.drawPath(path, iconPaint)
+                c.drawLine(cx - h * 0.35f, cy - h * 0.15f, cx - h * 0.7f, cy + h * 0.2f, iconPaint)
+                c.drawLine(cx - h * 0.35f, cy + h * 0.55f, cx - h * 0.7f, cy + h * 0.2f, iconPaint)
+            }
+            Icon.BACK -> {
+                path.moveTo(cx - h * 0.75f, cy)
+                path.lineTo(cx - h * 0.25f, cy - h * 0.6f)
+                path.lineTo(cx + h * 0.75f, cy - h * 0.6f)
+                path.lineTo(cx + h * 0.75f, cy + h * 0.6f)
+                path.lineTo(cx - h * 0.25f, cy + h * 0.6f)
+                path.close()
+                c.drawPath(path, iconPaint)
+                c.drawLine(cx - h * 0.15f, cy - h * 0.25f, cx + h * 0.4f, cy + h * 0.25f, iconPaint)
+                c.drawLine(cx + h * 0.4f, cy - h * 0.25f, cx - h * 0.15f, cy + h * 0.25f, iconPaint)
+            }
+            Icon.REDO -> {
+                // U-turn: puja per l'esquerra, volta per dalt i baixa per la dreta amb punta
+                path.moveTo(cx - h * 0.5f, cy + h * 0.6f)
+                path.lineTo(cx - h * 0.5f, cy - h * 0.1f)
+                path.cubicTo(
+                    cx - h * 0.5f, cy - h * 0.75f,
+                    cx + h * 0.5f, cy - h * 0.75f,
+                    cx + h * 0.5f, cy - h * 0.1f
+                )
+                path.lineTo(cx + h * 0.5f, cy + h * 0.6f)
+                c.drawPath(path, iconPaint)
+                c.drawLine(cx + h * 0.2f, cy + h * 0.3f, cx + h * 0.5f, cy + h * 0.6f, iconPaint)
+                c.drawLine(cx + h * 0.8f, cy + h * 0.3f, cx + h * 0.5f, cy + h * 0.6f, iconPaint)
+            }
+        }
+        iconPaint.alpha = 255
+        iconBasePaint.alpha = 255
     }
 
     private val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-
     private val keycapPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE; strokeWidth = 6f
@@ -994,42 +1214,115 @@ class DualGridView(context: Context) : View(context) {
     private val hintKeyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
     private val langPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
 
+    private val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+    }
+    private val iconBasePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+
+    /** Color literal, sense dependre de cap token compartit: blanc en fosc, negre en clar. */
+    private fun iconColor(): Int =
+        if (theme.isDark) 0xFFFFFFFF.toInt() else 0xFF111111.toInt()
+    private fun drawSoftShadow(canvas: Canvas, r: RectF, radius: Float) {
+        val alphas = intArrayOf(0x14, 0x0F, 0x0A)
+        for (i in alphas.indices) {
+            val dy = px(2f) * (i + 1)
+            val grow = px(1f) * i
+            shadowPaint.color = theme.shadowColor
+            shadowPaint.alpha = alphas[i]
+            canvas.drawRoundRect(
+                r.left - grow, r.top - grow + dy,
+                r.right + grow, r.bottom + grow + dy,
+                radius, radius, shadowPaint
+            )
+        }
+        shadowPaint.alpha = 255
+    }
+
     private fun drawHints(
-        canvas: Canvas, key: KeyDef, r: RectF, capsVisual: Boolean
+        canvas: Canvas, key: KeyDef, r: RectF, capsVisual: Boolean,
+        press: PressAnim?, now: Long
     ) {
         hintKeyPaint.color = theme.hint
-        hintKeyPaint.textSize = px(13f)
-        hintKeyPaint.typeface = fontRegular
-        val yC = -(hintKeyPaint.descent() + hintKeyPaint.ascent()) / 2f
+        val baseSize = px(13f)
+        val yCbase = baseSize * 0.35f
         for ((dir, raw) in key.swipes) {
             val ch = if (capsVisual) raw.uppercase() else raw
+            var extra = 0f
+            var sizeMul = 1f
+            var bold = false
+            if (press != null && animDepth) {
+                val pr = pressProgress(press, now)
+                extra = pr * px(6f)
+                sizeMul = 1f + 0.2f * pr
+                if (press.sel == dir) { sizeMul = 1f + 0.5f * pr; bold = true }
+            }
+            hintKeyPaint.textSize = baseSize * sizeMul
+            hintKeyPaint.typeface = if (bold) fontSemiBold else fontRegular
             val cx = when (dir) {
                 SwipeDir.N, SwipeDir.S -> r.centerX()
                 SwipeDir.NE, SwipeDir.E, SwipeDir.SE -> r.right - r.width() * 0.16f
                 else -> r.left + r.width() * 0.16f
+            } + when (dir) {
+                SwipeDir.E, SwipeDir.NE, SwipeDir.SE -> extra
+                SwipeDir.W, SwipeDir.NW, SwipeDir.SW -> -extra
+                else -> 0f
             }
             val cy = when (dir) {
-                SwipeDir.N, SwipeDir.NE, SwipeDir.NW -> r.top + r.height() * 0.14f
-                SwipeDir.S, SwipeDir.SE, SwipeDir.SW -> r.bottom - r.height() * 0.10f
+                SwipeDir.N, SwipeDir.NE, SwipeDir.NW -> r.top + r.height() * 0.14f - extra
+                SwipeDir.S, SwipeDir.SE, SwipeDir.SW -> r.bottom - r.height() * 0.10f + extra
                 else -> r.centerY()
             }
-            canvas.drawText(ch, cx, cy + yC, hintKeyPaint)
+            canvas.drawText(ch, cx, cy + yCbase, hintKeyPaint)
         }
+    }
+
+    private fun pressProgress(p: PressAnim, now: Long): Float {
+        return if (p.release < 0) cubicOut(t01(p.start + blobDelay(), dur(130), now))
+        else 1f - cubicOut(t01(p.release, dur(100), now))
     }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         if (width == 0 || height == 0) return
 
+        val now = SystemClock.uptimeMillis()
         val g = geo()
         val capsVisual = shiftMode != ShiftMode.OFF || shouldAutoCap()
 
-        // Fons del teclat
+        fadingPresses.removeAll { t01(it.release, fbDur(), now) >= 1f }
+        feedbacks.removeAll { t01(it.start, fbDur(), now) >= 1f }
+        slides.removeAll { t01(it.start, slideDur(), now) >= 1f }
+
+        if (barAnimStart >= 0L) {
+            val t = cubicOut(t01(barAnimStart, dur(200), now))
+            barP = barAnimFrom + (barTarget - barAnimFrom) * t
+            if (!animStrong) barP = barTarget
+        }
+
+        if (knobSpringStart >= 0L) {
+            val t = cubicOut(t01(knobSpringStart, dur(200), now))
+            knobP = knobSpringFrom * (1f - t)
+            if (t >= 1f) { knobSpringStart = -1L; knobP = 0f }
+            if (!animDepth) { knobSpringStart = -1L; knobP = 0f }
+        }
+
+        if (capsVisual != lastCapsVisual) {
+            caseFromUpper = lastCapsVisual
+            caseAnimStart = if (caseDur() > 0L && animStrong) now else -1L
+            lastCapsVisual = capsVisual
+            if (caseAnimStart >= 0L) kickAnim()
+        }
+        val caseT = if (caseAnimStart >= 0L) cubicOut(t01(caseAnimStart, caseDur(), now)) else 1f
+
         canvas.drawColor(theme.role[Themes.BG])
 
-        // Franja superior: barra de capes (substitueix els suggeriments)
-        if (g.barHeight > 0f) {
-            canvas.drawRect(0f, 0f, width.toFloat(), g.barHeight,
+        if (barP > 0.001f) {
+            canvas.save()
+            canvas.clipRect(0f, 0f, width.toFloat(), g.stripH)
+            canvas.translate(0f, (1f - barP) * g.stripH)
+            canvas.drawRect(0f, 0f, width.toFloat(), g.stripH,
                 keycapPaint.apply { color = theme.role[Themes.STRIP] })
             val cw = g.contentWidth / 10f
             val page = barPages[barPage]
@@ -1039,66 +1332,266 @@ class DualGridView(context: Context) : View(context) {
             val yC = -(textPaint.descent() + textPaint.ascent()) / 2f
             for (i in 0..9) {
                 canvas.drawText(page[i], g.contentLeft + i * cw + cw / 2f,
-                    g.barHeight / 2f + yC, textPaint)
+                    g.stripH / 2f + yC, textPaint)
             }
             hintPaint.color = theme.hint
             hintPaint.textSize = px(10f)
             for (p in barPages.indices) {
                 val dotX = g.contentLeft + g.contentWidth / 2f + (p - 1) * px(14f)
                 hintPaint.alpha = if (p == barPage) 255 else 120
-                canvas.drawText("•", dotX, g.barHeight - px(6f), hintPaint)
+                canvas.drawText("•", dotX, g.stripH - px(6f), hintPaint)
             }
             hintPaint.alpha = 255
+            canvas.restore()
         }
 
-        // Keycaps de les dues graelles
+        fun dimFor(r: RectF): Float {
+            if (!animDepth) return 0f
+            var d = 0f
+            val all = presses.values.toList() + fadingPresses
+            for (p in all) {
+                val pr = pressProgress(p, now)
+                if (pr <= 0f) continue
+                val pc = cellRect(g, p.side, p.row, p.col)
+                val dist = hypot(pc.centerX() - r.centerX(), pc.centerY() - r.centerY())
+                val fall = (1f - dist / (3.5f * g.colW)).coerceIn(0f, 1f)
+                d = maxOf(d, pr * fall)
+            }
+            return d
+        }
+
         val radius = px(16f)
         for (side in listOf(GridSide.LEFT, GridSide.RIGHT)) {
             for (row in 0..2) {
                 for (col in 0..2) {
                     val r = cellRect(g, side, row, col)
-                    if (theme.keycapShadow) drawSoftShadow(canvas, r, radius)
-                    keycapPaint.color = theme.role[Themes.KEYCAP]
+                    val press = presses.values.firstOrNull {
+                        it.side == side && it.row == row && it.col == col
+                    }
+                    val fading = fadingPresses.firstOrNull {
+                        it.side == side && it.row == row && it.col == col
+                    }
+                    val lifted = press != null && animDepth && pressProgress(press, now) > 0.05f
+
+                    var capColor = theme.role[Themes.KEYCAP]
+                    val dim = dimFor(r)
+                    if (dim > 0f) capColor = blendColor(capColor, theme.pole, dim * 0.35f)
+
+                    // Flash: ple mentre el dit hi és; fade només després del release
+                    val fb = cellFeedback(side, row, col)
+                    val fbT = if (fb != null) t01(fb.start, fbDur(), now) else 1f
+                    var flash = 0f
+                    if (animHelp) {
+                        flash = when {
+                            press != null -> 0.45f
+                            fading != null -> 0.45f * (1f - t01(fading.release, fbDur(), now))
+                            else -> 0f
+                        }
+                    }
+                    if (flash > 0f) capColor = blendColor(capColor, theme.flashPole, flash)
+
+                    if (theme.keycapShadow && !lifted) drawSoftShadow(canvas, r, radius)
+                    keycapPaint.color = capColor
                     canvas.drawRoundRect(r, radius, radius, keycapPaint)
 
                     val key = keyAt(side, row, col)
-                    letterPaint.color = theme.text
-                    letterPaint.textSize = px(28f)
-                    letterPaint.typeface = if (capsVisual) fontSemiBold else fontMedium
-                    val yC = -(letterPaint.descent() + letterPaint.ascent()) / 2f
-                    val label = if (capsVisual) key.tap.uppercase() else key.tap
-                    canvas.drawText(label, r.centerX(), r.centerY() + yC, letterPaint)
 
-                    if (showHints) drawHints(canvas, key, r, capsVisual)
+                    canvas.save()
+                    canvas.clipRect(r)
+                    val yC = -(letterPaint.descent() + letterPaint.ascent()) / 2f
+                    val midY = r.centerY() + yC
+                    letterPaint.textSize = px(28f)
+                    letterPaint.color = theme.text
+                    val lower = key.tap
+                    val upper = key.tap.uppercase()
+                    if (fb != null && fbT < 0.75f) {
+                        letterPaint.typeface = fontSemiBold
+                        canvas.drawText(fb.char, r.centerX(), midY, letterPaint)
+                    } else if (fb != null) {
+                        val u = (fbT - 0.75f) / 0.25f
+                        letterPaint.typeface = fontSemiBold
+                        letterPaint.alpha = (255 * (1f - u)).toInt()
+                        canvas.drawText(fb.char, r.centerX(), midY, letterPaint)
+                        letterPaint.typeface = if (capsVisual) fontSemiBold else fontMedium
+                        letterPaint.alpha = (255 * u).toInt()
+                        canvas.drawText(if (capsVisual) upper else lower, r.centerX(), midY, letterPaint)
+                        letterPaint.alpha = 255
+                    } else if (!lifted && animStrong && caseT < 1f) {
+                        // Empenta en 3 fases: l'entrant puja sol -> contacte i pugen junts ->
+                        // l'entrant s'atura al centre i el sortint acaba de sortir sol
+                        val H = r.height()
+                        val gap = 0.25f * H
+                        val a = 0.4286f
+                        val b = 0.5714f
+                        val t = caseT
+                        val yIn: Float
+                        val yOut: Float
+                        when {
+                            t < a -> {
+                                val u = t / a
+                                yIn = H - u * (H - gap)
+                                yOut = 0f
+                            }
+                            t < b -> {
+                                val u = (t - a) / (b - a)
+                                yIn = gap - u * gap
+                                yOut = -u * gap
+                            }
+                            else -> {
+                                val u = (t - b) / (1f - b)
+                                yIn = 0f
+                                yOut = -gap - u * (H - gap)
+                            }
+                        }
+                        val inCh = if (capsVisual) upper else lower
+                        val outCh = if (caseFromUpper) upper else lower
+                        letterPaint.typeface = if (capsVisual) fontSemiBold else fontMedium
+                        canvas.drawText(inCh, r.centerX(), midY + yIn, letterPaint)
+                        letterPaint.typeface = if (caseFromUpper) fontSemiBold else fontMedium
+                        canvas.drawText(outCh, r.centerX(), midY + yOut, letterPaint)
+                    } else if (!lifted) {
+                        val boldSel = press != null && press.sel == SwipeDir.TAP && animDepth
+                        letterPaint.typeface =
+                            if (capsVisual || boldSel) fontSemiBold else fontMedium
+                        canvas.drawText(if (capsVisual) upper else lower, r.centerX(), midY, letterPaint)
+                    }
+                    canvas.restore()
+
+                    if (showHints && !lifted && fb == null) {
+                        drawHints(canvas, key, r, capsVisual, press, now)
+                    }
                 }
             }
         }
 
-        // Pill del gap (espai)
+        if (animDepth) {
+            val all = presses.values.toList() + fadingPresses
+            for (p in all) {
+                val pr = pressProgress(p, now)
+                if (pr <= 0f) continue
+                val r = cellRect(g, p.side, p.row, p.col)
+                val sc = 1f + 0.35f * pr
+                val cx = r.centerX(); val cy = r.centerY()
+                val lr = RectF(
+                    cx - r.width() * sc / 2f, cy - r.height() * sc / 2f,
+                    cx + r.width() * sc / 2f, cy + r.height() * sc / 2f
+                )
+                val liftFlash = if (!animHelp) 0f else when {
+                    p.release < 0 -> 0.45f
+                    else -> 0.45f * (1f - t01(p.release, fbDur(), now))
+                }
+                val liftColor =
+                    if (liftFlash > 0f) blendColor(theme.role[Themes.KEYCAP], theme.flashPole, liftFlash)
+                    else theme.role[Themes.KEYCAP]
+                drawSoftShadow(canvas, lr, radius * sc)
+                keycapPaint.color = liftColor
+                canvas.drawRoundRect(lr, radius * sc, radius * sc, keycapPaint)
+
+                val key = keyAt(p.side, p.row, p.col)
+                val fb = cellFeedback(p.side, p.row, p.col)
+                val fbT = if (fb != null) t01(fb.start, fbDur(), now) else 1f
+                val label = if (fb != null && fbT < 0.75f) fb.char
+                else if (capsVisual) key.tap.uppercase() else key.tap
+                val yC = -(letterPaint.descent() + letterPaint.ascent()) / 2f
+                letterPaint.textSize = px(28f)
+                val centerScale = if (p.sel != SwipeDir.TAP) 0.9f else 1f
+                letterPaint.typeface =
+                    if (fb != null || p.sel == SwipeDir.TAP || capsVisual) fontSemiBold else fontMedium
+                letterPaint.color = theme.text
+                canvas.save()
+                canvas.translate(cx, cy + yC)
+                canvas.scale(centerScale, centerScale)
+                canvas.drawText(label, 0f, 0f, letterPaint)
+                canvas.restore()
+
+                if (fb == null) drawHints(canvas, key, lr, capsVisual, p, now)
+            }
+        }
+
         val pillRect = RectF(g.gapLeft, g.gridTop + g.padV,
             g.gapRight, g.gridTop + g.padV + 3 * g.rowH + 2 * g.gapU)
+        var pillColor = theme.role[Themes.KEYCAP]
+        val pillFb = feedbacks.firstOrNull { it.pill }
+        val pillFbT = if (pillFb != null) t01(pillFb.start, fbDur(), now) else 1f
+        val pillFlash = if (!animHelp) 0f else when {
+            pillDownSince >= 0 -> 0.45f
+            pillReleasedAt >= 0 -> 0.45f * (1f - t01(pillReleasedAt, fbDur(), now))
+            else -> 0f
+        }
+        if (pillFlash > 0f) pillColor = blendColor(pillColor, theme.flashPole, pillFlash)
         if (theme.keycapShadow) drawSoftShadow(canvas, pillRect, g.pillW / 2f)
-        keycapPaint.color = theme.role[Themes.KEYCAP]
+        keycapPaint.color = pillColor
         canvas.drawRoundRect(pillRect, g.pillW / 2f, g.pillW / 2f, keycapPaint)
-        hintPaint.color = theme.hint
-        hintPaint.textSize = px(18f)
-        hintPaint.typeface = fontRegular
-        val pillYC = -(hintPaint.descent() + hintPaint.ascent()) / 2f
-        canvas.drawText("␣", pillRect.centerX(), pillRect.centerY() + pillYC, hintPaint)
 
-        // Càpsula d'idioma entre la graella i el lliscador
+        if (shiftMode == ShiftMode.CAPS) {
+            drawIcon(canvas, Icon.CAPS, pillRect.centerX(), pillRect.centerY(), px(24f))
+        } else if (pillFb != null && pillFbT < 0.75f) {
+            hintPaint.color = theme.text
+            hintPaint.textSize = px(18f)
+            hintPaint.typeface = fontSemiBold
+            val pillYC = -(hintPaint.descent() + hintPaint.ascent()) / 2f
+            canvas.drawText(pillFb.char, pillRect.centerX(), pillRect.centerY() + pillYC, hintPaint)
+        } else if (pillFb != null) {
+            val u = (pillFbT - 0.75f) / 0.25f
+            hintPaint.color = theme.text
+            hintPaint.textSize = px(18f)
+            hintPaint.typeface = fontSemiBold
+            hintPaint.alpha = (255 * (1f - u)).toInt()
+            val pillYC = -(hintPaint.descent() + hintPaint.ascent()) / 2f
+            canvas.drawText(pillFb.char, pillRect.centerX(), pillRect.centerY() + pillYC, hintPaint)
+            hintPaint.alpha = 255
+        } else {
+            hintPaint.color = theme.hint
+            hintPaint.textSize = px(18f)
+            hintPaint.typeface = fontRegular
+            val pillYC = -(hintPaint.descent() + hintPaint.ascent()) / 2f
+            canvas.drawText("␣", pillRect.centerX(), pillRect.centerY() + pillYC, hintPaint)
+        }
+
+        for (s in slides.toList()) {
+            val tr = t01(s.start, slideDur(), now)
+            val t = cubicOut(tr)
+            val fade = ((tr - 0.55f) / 0.45f).coerceIn(0f, 1f)
+            val alpha = (255 * (1f - fade)).toInt()
+            val travel = pillRect.height() * 0.35f
+            val dx = when (s.dir) {
+                SwipeDir.W -> -travel * t
+                SwipeDir.E -> travel * t
+                else -> 0f
+            }
+            val dy = when (s.dir) {
+                SwipeDir.N, SwipeDir.NE, SwipeDir.NW -> -travel * t
+                SwipeDir.S, SwipeDir.SE, SwipeDir.SW -> travel * t
+                else -> 0f
+            }
+            val withBase = (s.icon == Icon.BACK || s.icon == Icon.REDO)
+            drawIcon(canvas, s.icon, pillRect.centerX() + dx, pillRect.centerY() + dy,
+                px(26f), withBase = withBase, alpha = alpha)
+        }
+
         val capW = capsuleWidth()
         val capRect = RectF(g.contentLeft + px(8f), g.capsuleTop,
             g.contentLeft + px(8f) + capW, g.capsuleTop + g.capsuleH)
         keycapPaint.color = theme.role[Themes.SPECIAL]
         canvas.drawRoundRect(capRect, g.capsuleH / 2f, g.capsuleH / 2f, keycapPaint)
         langPaint.color = theme.text
-        langPaint.textSize = px(12f)
+        langPaint.textSize = px(11f)
         langPaint.typeface = fontMedium
         val capYC = -(langPaint.descent() + langPaint.ascent()) / 2f
-        canvas.drawText(lang.uppercase(), capRect.centerX(), capRect.centerY() + capYC, langPaint)
+        val capT = if (capsuleAnimStart >= 0L && animStrong)
+            cubicOut(t01(capsuleAnimStart, dur(150), now)) else 1f
+        if (capT < 1f) {
+            langPaint.alpha = (255 * (1f - capT)).toInt()
+            canvas.drawText(capsuleOld.uppercase(), capRect.centerX(),
+                capRect.centerY() + capYC - (1f - capT) * px(6f), langPaint)
+            langPaint.alpha = (255 * capT).toInt()
+            canvas.drawText(lang.uppercase(), capRect.centerX(),
+                capRect.centerY() + capYC + (1f - capT) * px(6f), langPaint)
+            langPaint.alpha = 255
+        } else {
+            canvas.drawText(lang.uppercase(), capRect.centerX(), capRect.centerY() + capYC, langPaint)
+        }
 
-        // Lliscador inferior amb franges i knob central
         val sliderRect = RectF(g.contentLeft + px(16f), g.sliderTop,
             g.contentLeft + g.contentWidth - px(16f), g.sliderTop + g.sliderH)
         keycapPaint.color = theme.role[Themes.SLIDER]
@@ -1106,19 +1599,24 @@ class DualGridView(context: Context) : View(context) {
         tickPaint.color = theme.hint
         tickPaint.alpha = 110
         val tickSpacing = px(12f)
-        var tx = sliderRect.left + tickSpacing
-        while (tx < sliderRect.right - tickSpacing) {
-            canvas.drawLine(tx, sliderRect.centerY() - px(6f),
-                tx, sliderRect.centerY() + px(6f), tickPaint)
+        val mod = ((tickOffset % tickSpacing) + tickSpacing) % tickSpacing
+        var tx = sliderRect.left + tickSpacing - mod
+        while (tx < sliderRect.right - tickSpacing / 2f) {
+            if (tx > sliderRect.left + tickSpacing / 2f) {
+                canvas.drawLine(tx, sliderRect.centerY() - px(6f),
+                    tx, sliderRect.centerY() + px(6f), tickPaint)
+            }
             tx += tickSpacing
         }
         tickPaint.alpha = 255
-        val knobD = px(40f)
-        val knobRect = RectF(sliderRect.centerX() - knobD / 2f, sliderRect.centerY() - knobD / 2f,
-            sliderRect.centerX() + knobD / 2f, sliderRect.centerY() + knobD / 2f)
-        drawSoftShadow(canvas, knobRect, knobD / 2f)
+
+        val kd = knobD(g)
+        val kcx = knobCenterX(g) + knobP * knobTravel(g)
+        val knobRect = RectF(kcx - kd / 2f, sliderRect.centerY() - kd / 2f,
+            kcx + kd / 2f, sliderRect.centerY() + kd / 2f)
+        drawSoftShadow(canvas, knobRect, kd / 2f)
         keycapPaint.color = theme.role[Themes.KNOB]
-        canvas.drawRoundRect(knobRect, knobD / 2f, knobD / 2f, keycapPaint)
+        canvas.drawRoundRect(knobRect, kd / 2f, kd / 2f, keycapPaint)
         tickPaint.color = theme.hint
         for (i in -1..1) {
             val bx = knobRect.centerX() + i * px(6f)
@@ -1126,9 +1624,18 @@ class DualGridView(context: Context) : View(context) {
                 bx, knobRect.centerY() + px(8f), tickPaint)
         }
 
-        // Vectors de gest actius
-        for (state in activePointers.values) {
-            canvas.drawLine(state.startX, state.startY, state.currentX, state.currentY, linePaint)
+        if (animTrace) {
+            for (state in activePointers.values) {
+                linePaint.strokeCap = Paint.Cap.ROUND
+                linePaint.color = theme.text
+                linePaint.alpha = 55
+                linePaint.strokeWidth = px(10f)
+                canvas.drawLine(state.startX, state.startY, state.currentX, state.currentY, linePaint)
+                linePaint.alpha = 140
+                linePaint.strokeWidth = px(3f)
+                canvas.drawLine(state.startX, state.startY, state.currentX, state.currentY, linePaint)
+                linePaint.alpha = 255
+            }
         }
     }
 
@@ -1137,6 +1644,7 @@ class DualGridView(context: Context) : View(context) {
 
         val g = geo()
         val edgeZone = 24 * resources.displayMetrics.density
+        val now = SystemClock.uptimeMillis()
 
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
@@ -1148,24 +1656,28 @@ class DualGridView(context: Context) : View(context) {
                 var zone = Zone.LEFT
                 var side: GridSide? = null
                 var row = 0; var col = 0; var cellIndex = 0
+                var knobDrag = false
 
                 val capW = capsuleWidth()
                 val capExtra = px(12f)
+                val kd = knobD(g)
+                val kcx = knobCenterX(g) + knobP * knobTravel(g)
                 when {
-                    g.barHeight > 0f && y < g.barHeight -> {
+                    barP > 0.5f && y < g.gridTop -> {
                         zone = Zone.BAR
                         cellIndex = ((x - g.contentLeft) / (g.contentWidth / 10f))
                             .toInt().coerceIn(0, 9)
                     }
-                    y > height - g.sliderZone && y < g.sliderTop -> {
-                        zone = Zone.CAPSULE
-                    }
-                    y >= g.sliderTop - capExtra && y <= g.sliderTop + g.sliderH + capExtra &&
+                    y >= g.capsuleTop - capExtra && y <= g.capsuleTop + g.capsuleH + capExtra &&
                             x >= g.contentLeft && x <= g.contentLeft + px(8f) + capW + capExtra -> {
                         zone = Zone.CAPSULE
                     }
                     y >= g.sliderTop - capExtra -> {
                         zone = Zone.SLIDER
+                        if (abs(x - kcx) < kd) {
+                            knobDrag = true
+                            knobSpringStart = -1L
+                        }
                     }
                     x < g.gapLeft && x >= g.contentLeft -> {
                         side = GridSide.LEFT
@@ -1182,12 +1694,23 @@ class DualGridView(context: Context) : View(context) {
                     else -> zone = Zone.SPACE
                 }
 
-                activePointers[id] = PointerState(
+                val st = PointerState(
                     id, zone, side, row, col, cellIndex, x, y,
                     startTime = event.eventTime,
                     currentX = x, currentY = y,
-                    lastX = x, lastTime = event.eventTime
+                    lastX = x, lastTime = event.eventTime,
+                    knobDrag = knobDrag, grabX = x
                 )
+                activePointers[id] = st
+
+                if (side != null) {
+                    presses[id] = PressAnim(side, row, col, now)
+                    kickAnim()
+                }
+                if (zone == Zone.SPACE && pillDownSince < 0) {
+                    pillDownSince = now
+                    kickAnim()
+                }
             }
 
             MotionEvent.ACTION_MOVE -> {
@@ -1199,23 +1722,31 @@ class DualGridView(context: Context) : View(context) {
                     val t = event.eventTime
                     val dt = (t - state.lastTime).coerceAtLeast(1L)
                     val dxEvent = x - state.lastX
-                    val speed = abs(dxEvent) / dt.toFloat()
-                    val mult = 1f + minOf(3f, maxOf(0f, speed - 0.4f) / 0.6f)
                     state.currentX = x
                     state.currentY = y
 
-                    val pxPerCursorUnit =
-                        if (cursorWord) width * 5f / sensChars else width / sensChars
-                    val pxPerEraseUnit = width / sensErase
-
                     if (state.zone == Zone.SLIDER) {
-                        state.cursorAcc += dxEvent * mult / pxPerCursorUnit
-                        val n = state.cursorAcc.toInt()
-                        if (n != 0) {
-                            textTarget?.moveCursor(n, cursorWord)
-                            state.cursorAcc -= n
+                        if (state.knobDrag) {
+                            val travel = knobTravel(g)
+                            val p = ((x - state.grabX) / travel).coerceIn(-1f, 1f)
+                            state.knobP = p
+                            knobP = p
+                            val v = vmax * p
+                            state.cursorAcc += v * dt / 1000f
+                            val n = state.cursorAcc.toInt()
+                            if (n != 0) { sliderMove(n); state.cursorAcc -= n }
+                            kickAnim()
+                        } else {
+                            val speed = abs(dxEvent) / dt.toFloat()
+                            val mult = 1f + minOf(3f, maxOf(0f, speed - 0.4f) / 0.6f)
+                            val pxPerCursorUnit =
+                                if (cursorWord) width * 5f / sensChars else width / sensChars
+                            state.cursorAcc += dxEvent * mult / pxPerCursorUnit
+                            val n = state.cursorAcc.toInt()
+                            if (n != 0) { sliderMove(n); state.cursorAcc -= n }
                         }
                     } else if (state.zone == Zone.SPACE) {
+                        val pxPerEraseUnit = width / sensErase
                         val dx = x - state.startX
                         if (x <= edgeZone && dx < 0) startEdgeRepeat(id, true)
                         else if (x >= width - edgeZone && dx > 0) startEdgeRepeat(id, false)
@@ -1246,6 +1777,15 @@ class DualGridView(context: Context) : View(context) {
                                 }
                             }
                         }
+                    } else if (state.side != null) {
+                        val press = presses[id]
+                        if (press != null) {
+                            val dx = x - state.startX
+                            val dy = y - state.startY
+                            val dist = hypot(dx, dy)
+                            press.sel = if (dist < swipeThreshold) SwipeDir.TAP
+                            else directionFrom(dx, dy)
+                        }
                     }
 
                     state.lastX = x
@@ -1258,18 +1798,57 @@ class DualGridView(context: Context) : View(context) {
                 val id = event.getPointerId(index)
                 stopEdgeRepeat(id)
                 val state = activePointers.remove(id) ?: return true
+                presses.remove(id)?.let { p ->
+                    p.release = now
+                    fadingPresses.add(p)
+                    kickAnim()
+                }
+                if (state.knobDrag) {
+                    knobSpringFrom = state.knobP
+                    knobSpringStart = now
+                    kickAnim()
+                }
+                if (state.zone == Zone.SPACE) {
+                    pillDownSince = -1L
+                    pillReleasedAt = now
+                }
                 resolvePointer(state)
             }
 
             MotionEvent.ACTION_CANCEL -> {
                 activePointers.keys.toList().forEach { stopEdgeRepeat(it) }
+                activePointers.keys.toList().forEach { id ->
+                    presses.remove(id)?.let { p -> p.release = now; fadingPresses.add(p) }
+                }
                 activePointers.clear()
+                knobSpringFrom = knobP
+                knobSpringStart = now
+                pillDownSince = -1L
+                pillReleasedAt = now
                 Log.d("GridTouch", "CANCEL")
             }
         }
 
         invalidate()
         return true
+    }
+
+    private fun toggleBar() {
+        val now = SystemClock.uptimeMillis()
+        if (now - lastCenterTapTime < doubleWindowMs.toLong()) {
+            barVisible = true
+            barPage = 1
+            lastCenterTapTime = 0L
+        } else {
+            barVisible = !barVisible
+            barPage = 0
+            lastCenterTapTime = now
+        }
+        barTarget = if (barVisible) 1f else 0f
+        barAnimFrom = barP
+        barAnimStart = now
+        if (!animStrong) barP = barTarget
+        kickAnim()
     }
 
     private fun resolvePointer(state: PointerState) {
@@ -1300,19 +1879,10 @@ class DualGridView(context: Context) : View(context) {
                     val g = geo()
                     val inCenter = state.startX > g.contentLeft + g.contentWidth / 3f &&
                             state.startX < g.contentLeft + 2f * g.contentWidth / 3f
-                    if (inCenter) {
-                        val now = SystemClock.uptimeMillis()
-                        if (now - lastCenterTapTime < doubleWindowMs.toLong()) {
-                            barVisible = true
-                            barPage = 1
-                            lastCenterTapTime = 0L
-                        } else {
-                            barVisible = !barVisible
-                            barPage = 0
-                            lastCenterTapTime = now
-                        }
-                        invalidate()
-                    }
+                    val kd = knobD(g)
+                    val kcx = knobCenterX(g)
+                    val onKnob = abs(state.startX - kcx) < kd
+                    if (inCenter || onKnob) toggleBar()
                 }
             }
 
@@ -1320,30 +1890,54 @@ class DualGridView(context: Context) : View(context) {
                 SwipeDir.TAP -> {
                     val b = textTarget?.peekBefore(2) ?: ""
                     val blocked = autoSpace && b.length == 2 && b[1] == ' ' && b[0] in autoSpaceChars
-                    if (!blocked) textTarget?.commit(" ")
+                    if (!blocked) {
+                        textTarget?.commit(" ")
+                        undoStack.clear()
+                        spawnFeedback(null, 0, 0, true, "␣")
+                    }
                 }
                 SwipeDir.W -> {
                     if (state.deleted == 0 && state.redone == 0) {
                         val ch = textTarget?.deleteBefore() ?: ""
                         if (ch.isNotEmpty()) undoStack.addLast(ch)
                     }
+                    slides.add(GlyphSlide(Icon.BACK, dir, SystemClock.uptimeMillis()))
+                    kickAnim()
                 }
                 SwipeDir.E -> {
                     if (state.deleted == 0 && state.redone == 0) {
                         undoStack.removeLastOrNull()?.let { textTarget?.commit(it) }
                     }
+                    slides.add(GlyphSlide(Icon.REDO, dir, SystemClock.uptimeMillis()))
+                    kickAnim()
                 }
-                SwipeDir.S, SwipeDir.SE, SwipeDir.SW -> textTarget?.enter()
+                SwipeDir.S, SwipeDir.SE, SwipeDir.SW -> {
+                    textTarget?.enter()
+                    undoStack.clear()
+                    slides.add(GlyphSlide(Icon.ENTER, SwipeDir.S, SystemClock.uptimeMillis()))
+                    kickAnim()
+                }
                 else -> {
                     val now = SystemClock.uptimeMillis()
+                    val prevMode = shiftMode
                     shiftMode = when {
                         shiftMode == ShiftMode.CAPS -> ShiftMode.OFF
                         now - lastUpSwipeTime < doubleWindowMs.toLong() -> {
-                            lastUpSwipeTime = 0L; ShiftMode.CAPS
+                            lastUpSwipeTime = 0L
+                            ShiftMode.CAPS
                         }
-                        else -> { lastUpSwipeTime = now; ShiftMode.ONCE }
+                        else -> {
+                            lastUpSwipeTime = now
+                            ShiftMode.ONCE
+                        }
                     }
-                    invalidate()
+                    val icon = if (shiftMode == ShiftMode.CAPS && prevMode != ShiftMode.CAPS) {
+                        Icon.CAPS
+                    } else {
+                        Icon.SHIFT
+                    }
+                    slides.add(GlyphSlide(icon, SwipeDir.N, now))
+                    kickAnim()
                 }
             }
 
@@ -1351,7 +1945,10 @@ class DualGridView(context: Context) : View(context) {
                 val side = state.side ?: return
                 val key = keyAt(side, state.originRow, state.originCol)
                 val raw = if (dir == SwipeDir.TAP) key.tap else key.swipes[dir]
-                if (raw != null) commitChar(raw)
+                if (raw != null) {
+                    val out = commitChar(raw)
+                    spawnFeedback(side, state.originRow, state.originCol, pill = false, char = out)
+                }
             }
         }
     }
