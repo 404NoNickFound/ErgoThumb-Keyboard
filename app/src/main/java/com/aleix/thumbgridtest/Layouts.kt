@@ -1,12 +1,10 @@
 package com.aleix.thumbgridtest
 
-/** Una tecla: lletra de tap + gestos per direcció. */
 data class KeyDef(
     val tap: String,
     val swipes: Map<SwipeDir, String> = emptyMap()
 )
 
-/** Les dues graelles d'un idioma. */
 data class LayoutData(
     val left: List<KeyDef>,
     val right: List<KeyDef>
@@ -21,6 +19,11 @@ object Layouts {
         "es" to "Castellà",
         "en" to "Anglès"
     )
+    val NATIVE = mapOf(
+        "ca" to "Català",
+        "es" to "Castellano",
+        "en" to "English"
+    )
 
     private val CA = LayoutData(
         left = listOf(
@@ -31,14 +34,14 @@ object Layouts {
             KeyDef("s", mapOf(SwipeDir.N to "x", SwipeDir.E to "q", SwipeDir.W to "z")),
             KeyDef("c", mapOf(SwipeDir.S to "ç")),
             KeyDef("f"),
-            KeyDef("n"),
+            KeyDef("n", mapOf(SwipeDir.N to "y")),
             KeyDef("r")
         ),
         right = listOf(
-            KeyDef("i", mapOf(SwipeDir.SE to "í", SwipeDir.S to "y")),
+            KeyDef("i", mapOf(SwipeDir.SE to "í", SwipeDir.S to "ï")),
             KeyDef("o", mapOf(SwipeDir.SW to "ò", SwipeDir.SE to "ó")),
             KeyDef("p"),
-            KeyDef("a", mapOf(SwipeDir.S to "à", SwipeDir.SE to "á")),
+            KeyDef("a", mapOf(SwipeDir.S to "à")),
             KeyDef("e", mapOf(
                 SwipeDir.SW to "è", SwipeDir.SE to "é",
                 SwipeDir.W to ".", SwipeDir.E to ",",

@@ -1,16 +1,22 @@
 package com.aleix.thumbgridtest
 
+import android.app.AlertDialog
+import android.app.KeyguardManager
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.RectF
+import android.graphics.Typeface
 import android.inputmethodservice.InputMethodService
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.provider.Settings
+import android.text.InputType
 import android.util.Log
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -27,9 +33,11 @@ import androidx.appcompat.app.AppCompatActivity
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.hypot
+import androidx.appcompat.widget.AppCompatEditText
 
 object Prefs {
     const val NAME = "thumbgrid_prefs"
+
     const val KEY_HEIGHT = "height_fraction"
     const val KEY_GAP = "gap_fraction"
     const val KEY_THRESHOLD = "swipe_threshold_dp"
@@ -44,11 +52,13 @@ object Prefs {
     const val KEY_LANGS = "langs_enabled"
     const val KEY_SHOW_HINTS = "show_hints"
     const val KEY_BIGRAMS = "bigrams_enabled"
+    const val KEY_ONBOARDED = "onboarded"
+
     const val KEY_MARGIN_SIDE = "margin_side"
-    const val KEY_MARGIN_BOTTOM = "margin_bottom"
     const val KEY_MARGIN_LEFT = "margin_left"
     const val KEY_MARGIN_RIGHT = "margin_right"
     const val KEY_MARGIN_INDEP = "margin_indep"
+    const val KEY_MARGIN_BOTTOM = "margin_bottom"
 
     const val DEFAULT_HEIGHT = 0.35f
     const val DEFAULT_GAP = 0.10f
@@ -61,6 +71,7 @@ object Prefs {
     const val DEFAULT_MARGIN_BOTTOM = 12f
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences(NAME, Context.MODE_PRIVATE)
+
     fun height(ctx: Context) = prefs(ctx).getFloat(KEY_HEIGHT, DEFAULT_HEIGHT)
     fun gap(ctx: Context) = prefs(ctx).getFloat(KEY_GAP, DEFAULT_GAP)
     fun threshold(ctx: Context) = prefs(ctx).getFloat(KEY_THRESHOLD, DEFAULT_THRESHOLD_DP)
@@ -73,8 +84,10 @@ object Prefs {
     fun flickMs(ctx: Context) = prefs(ctx).getFloat(KEY_FLICK_MS, DEFAULT_FLICK_MS)
     fun showHints(ctx: Context) = prefs(ctx).getBoolean(KEY_SHOW_HINTS, true)
     fun bigrams(ctx: Context) = prefs(ctx).getBoolean(KEY_BIGRAMS, true)
+    fun onboarded(ctx: Context) = prefs(ctx).getBoolean(KEY_ONBOARDED, false)
+    fun setOnboarded(ctx: Context, v: Boolean) = prefs(ctx).edit().putBoolean(KEY_ONBOARDED, v).apply()
+
     fun marginSide(ctx: Context) = prefs(ctx).getFloat(KEY_MARGIN_SIDE, DEFAULT_MARGIN_SIDE)
-    fun marginBottom(ctx: Context) = prefs(ctx).getFloat(KEY_MARGIN_BOTTOM, DEFAULT_MARGIN_BOTTOM)
     fun marginIndep(ctx: Context) = prefs(ctx).getBoolean(KEY_MARGIN_INDEP, false)
     fun marginLeft(ctx: Context) =
         if (marginIndep(ctx)) prefs(ctx).getFloat(KEY_MARGIN_LEFT, marginSide(ctx))
@@ -82,6 +95,7 @@ object Prefs {
     fun marginRight(ctx: Context) =
         if (marginIndep(ctx)) prefs(ctx).getFloat(KEY_MARGIN_RIGHT, marginSide(ctx))
         else marginSide(ctx)
+    fun marginBottom(ctx: Context) = prefs(ctx).getFloat(KEY_MARGIN_BOTTOM, DEFAULT_MARGIN_BOTTOM)
 
     fun langs(ctx: Context): List<String> =
         (prefs(ctx).getString(KEY_LANGS, "ca,es,en") ?: "ca,es,en")
@@ -98,7 +112,59 @@ object Prefs {
     }
 }
 
-/** Superfície on escriu el teclat: l'EditText de proves o el camp real via IME. */
+/** Barreja lineal de dos colors ARGB. */
+fun blendColor(a: Int, b: Int, t: Float): Int {
+    val ar = (a shr 16) and 0xFF; val ag = (a shr 8) and 0xFF; val ab = a and 0xFF
+    val br = (b shr 16) and 0xFF; val bg = (b shr 8) and 0xFF; val bb = b and 0xFF
+    val r = (ar + (br - ar) * t).toInt().coerceIn(0, 255)
+    val g = (ag + (bg - ag) * t).toInt().coerceIn(0, 255)
+    val bl = (ab + (bb - ab) * t).toInt().coerceIn(0, 255)
+    return (0xFF shl 24) or (r shl 16) or (g shl 8) or bl
+}
+
+/**
+ * Motor de temes: rampa de 4 passos des del color principal cap al pol del mode
+ * (negre en fosc, blanc en clar), amb rols assignats per fracció de barreja.
+ */
+object Themes {
+    const val BG = 0; const val KEYCAP = 1; const val SPECIAL = 2
+    const val SLIDER = 3; const val KNOB = 4; const val STRIP = 5
+
+    class Theme(
+        val principal: Int,
+        val pole: Int,
+        val text: Int,
+        val hint: Int,
+        private val mixes: FloatArray,
+        val keycapShadow: Boolean
+    ) {
+        val role: IntArray = IntArray(mixes.size) { blendColor(principal, pole, mixes[it]) }
+        val isDark: Boolean get() = pole == Color.BLACK
+        val flashPole: Int get() = if (isDark) Color.WHITE else Color.BLACK
+        val shadowColor: Int get() = if (isDark) Color.BLACK else 0xFF1C1C1E.toInt()
+    }
+
+    val DARK = Theme(
+        principal = 0xFF8E8E93.toInt(), pole = Color.BLACK,
+        text = Color.WHITE, hint = 0xFF8E8E93.toInt(),
+        mixes = floatArrayOf(1.00f, 0.70f, 0.45f, 0.88f, 0.35f, 0.95f),
+        keycapShadow = false
+    )
+
+    val LIGHT = Theme(
+        principal = 0xFF8E8E93.toInt(), pole = Color.WHITE,
+        text = 0xFF1C1C1E.toInt(), hint = 0xFF8E8E93.toInt(),
+        mixes = floatArrayOf(0.18f, 1.00f, 0.45f, 0.35f, 1.00f, 0.12f),
+        keycapShadow = true
+    )
+
+    fun current(ctx: Context): Theme {
+        val night = (ctx.resources.configuration.uiMode and
+                Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+        return if (night) DARK else LIGHT
+    }
+}
+
 interface TextTarget {
     fun commit(text: String)
     fun deleteBefore(): String
@@ -112,12 +178,26 @@ enum class SwipeDir { TAP, N, NE, E, SE, S, SW, W, NW }
 class MainActivity : AppCompatActivity() {
 
     private lateinit var dualGridView: DualGridView
-    private lateinit var editText: EditText
+    private lateinit var editText: SelEditText
+
+    /** EditText que avisa quan canvia la selecció, per refrescar la preview de majúscules. */
+    private inner class SelEditText(ctx: Context) : AppCompatEditText(ctx) {
+        var onSel: (() -> Unit)? = null
+        override fun onSelectionChanged(selStart: Int, selEnd: Int) {
+            super.onSelectionChanged(selStart, selEnd)
+            onSel?.invoke()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        editText = EditText(this).apply {
+        if (!Prefs.onboarded(this)) {
+            setContentView(buildChooser())
+            return
+        }
+
+        editText = SelEditText(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
@@ -127,6 +207,7 @@ class MainActivity : AppCompatActivity() {
             hint = "Prova el teclat aquí"
             setBackgroundColor(Color.parseColor("#222222"))
             setPadding(32, 24, 32, 24)
+            onSel = { if (::dualGridView.isInitialized) dualGridView.invalidate() }
         }
 
         val enableButton = Button(this).apply {
@@ -210,6 +291,38 @@ class MainActivity : AppCompatActivity() {
         setContentView(root)
     }
 
+    /** Onboarding: tria d'idioma inicial (teclat + locale de la app). */
+    private fun buildChooser(): View {
+        val lay = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.parseColor("#111111"))
+            setPadding(64, 96, 64, 64)
+        }
+        lay.addView(TextView(this).apply {
+            text = "Tria el teu idioma / Elige tu idioma / Choose your language"
+            textSize = 20f
+            setTextColor(Color.WHITE)
+            setPadding(0, 0, 0, 48)
+        })
+        for (code in Layouts.CODES) {
+            lay.addView(Button(this).apply {
+                text = Layouts.NATIVE[code] ?: code
+                setOnClickListener { chooseLang(code) }
+            })
+        }
+        return lay
+    }
+
+    private fun chooseLang(code: String) {
+        val others = Layouts.CODES.filter { it != code }
+        Prefs.setLang(this, code)
+        getSharedPreferences(Prefs.NAME, MODE_PRIVATE).edit()
+            .putString(Prefs.KEY_LANGS, (listOf(code) + others).joinToString(","))
+            .putBoolean(Prefs.KEY_ONBOARDED, true)
+            .apply()
+        recreate()
+    }
+
     override fun onResume() {
         super.onResume()
         if (::dualGridView.isInitialized) dualGridView.reloadPrefs()
@@ -218,12 +331,13 @@ class MainActivity : AppCompatActivity() {
 
 class SettingsActivity : AppCompatActivity() {
 
+    private val reqUnlock = 1234
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         val prefs = getSharedPreferences(Prefs.NAME, MODE_PRIVATE)
 
-        // ScrollView: sense això, un LinearLayout no es pot desplaçar
         val scroll = ScrollView(this).apply {
             setBackgroundColor(Color.parseColor("#111111"))
         }
@@ -253,7 +367,7 @@ class SettingsActivity : AppCompatActivity() {
             }
             val bar = SeekBar(this).apply {
                 this.max = max - min
-                progress = current - min
+                progress = (current - min).coerceIn(0, max - min)
                 text.text = "$label: ${format(min + progress)}"
                 setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                     override fun onProgressChanged(b: SeekBar?, p: Int, user: Boolean) {
@@ -272,13 +386,12 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         slider("Alçada del teclat", 25, 60, (Prefs.height(this) * 100).toInt(),
-            format = { "$it% de la pantalla" },
-            onValue = { v -> prefs.edit().putFloat(Prefs.KEY_HEIGHT, v / 100f).apply() })
+            { "$it% de la pantalla" })
+        { v -> prefs.edit().putFloat(Prefs.KEY_HEIGHT, v / 100f).apply() }
         slider("Separació entre graelles", 0, 15, (Prefs.gap(this) * 100).toInt(),
-            format = { "$it% de l'amplada" },
-            onValue = { v -> prefs.edit().putFloat(Prefs.KEY_GAP, v / 100f).apply() })
+            { "$it% de l'amplada" })
+        { v -> prefs.edit().putFloat(Prefs.KEY_GAP, v / 100f).apply() }
 
-        // --- Marges laterals: simètric per defecte, independents opcional ---
         val indepBox = CheckBox(this).apply {
             text = "Marges laterals independents"
             setTextColor(Color.WHITE)
@@ -287,14 +400,14 @@ class SettingsActivity : AppCompatActivity() {
         root.addView(indepBox)
 
         val symBar = slider("Marge lateral (simètric)", 0, 12, Prefs.marginSide(this).toInt(),
-            format = { "$it% de l'amplada" },
-            onValue = { v -> prefs.edit().putFloat(Prefs.KEY_MARGIN_SIDE, v.toFloat()).apply() })
+            { "$it% de l'amplada" })
+        { v -> prefs.edit().putFloat(Prefs.KEY_MARGIN_SIDE, v.toFloat()).apply() }
         val leftBar = slider("Marge esquerre", 0, 12, Prefs.marginLeft(this).toInt(),
-            format = { "$it% de l'amplada" },
-            onValue = { v -> prefs.edit().putFloat(Prefs.KEY_MARGIN_LEFT, v.toFloat()).apply() })
+            { "$it% de l'amplada" })
+        { v -> prefs.edit().putFloat(Prefs.KEY_MARGIN_LEFT, v.toFloat()).apply() }
         val rightBar = slider("Marge dret", 0, 12, Prefs.marginRight(this).toInt(),
-            format = { "$it% de l'amplada" },
-            onValue = { v -> prefs.edit().putFloat(Prefs.KEY_MARGIN_RIGHT, v.toFloat()).apply() })
+            { "$it% de l'amplada" })
+        { v -> prefs.edit().putFloat(Prefs.KEY_MARGIN_RIGHT, v.toFloat()).apply() }
 
         fun refreshMarginBars() {
             val indep = indepBox.isChecked
@@ -320,23 +433,23 @@ class SettingsActivity : AppCompatActivity() {
         refreshMarginBars()
 
         slider("Marge inferior (barra)", 8, 25, Prefs.marginBottom(this).toInt(),
-            format = { "$it% de l'alçada" },
-            onValue = { v -> prefs.edit().putFloat(Prefs.KEY_MARGIN_BOTTOM, v.toFloat()).apply() })
+            { "$it% de l'alçada" })
+        { v -> prefs.edit().putFloat(Prefs.KEY_MARGIN_BOTTOM, v.toFloat()).apply() }
         slider("Llindar de gest", 12, 48, Prefs.threshold(this).toInt(),
-            format = { "$it dp" },
-            onValue = { v -> prefs.edit().putFloat(Prefs.KEY_THRESHOLD, v.toFloat()).apply() })
+            { "$it dp" })
+        { v -> prefs.edit().putFloat(Prefs.KEY_THRESHOLD, v.toFloat()).apply() }
         slider("Temps de doble acció", 150, 700, Prefs.doubleMs(this).toInt(),
-            format = { "$it ms" },
-            onValue = { v -> prefs.edit().putFloat(Prefs.KEY_DOUBLE_MS, v.toFloat()).apply() })
+            { "$it ms" })
+        { v -> prefs.edit().putFloat(Prefs.KEY_DOUBLE_MS, v.toFloat()).apply() }
         slider("Sensibilitat del cursor", 5, 60, Prefs.sensChars(this).toInt(),
-            format = { "$it caràcters per lliscada" },
-            onValue = { v -> prefs.edit().putFloat(Prefs.KEY_SENS_CHARS, v.toFloat()).apply() })
+            { "$it caràcters per lliscada" })
+        { v -> prefs.edit().putFloat(Prefs.KEY_SENS_CHARS, v.toFloat()).apply() }
         slider("Sensibilitat d'esborrat", 2, 30, Prefs.sensErase(this).toInt(),
-            format = { "$it caràcters per lliscada" },
-            onValue = { v -> prefs.edit().putFloat(Prefs.KEY_SENS_ERASE, v.toFloat()).apply() })
+            { "$it caràcters per lliscada" })
+        { v -> prefs.edit().putFloat(Prefs.KEY_SENS_ERASE, v.toFloat()).apply() }
         slider("Finestra de flick", 80, 400, Prefs.flickMs(this).toInt(),
-            format = { "$it ms" },
-            onValue = { v -> prefs.edit().putFloat(Prefs.KEY_FLICK_MS, v.toFloat()).apply() })
+            { "$it ms" })
+        { v -> prefs.edit().putFloat(Prefs.KEY_FLICK_MS, v.toFloat()).apply() }
 
         root.addView(CheckBox(this).apply {
             text = "Majúscula automàtica"
@@ -379,6 +492,19 @@ class SettingsActivity : AppCompatActivity() {
             }
         })
 
+        root.addView(TextView(this).apply {
+            val lines = Layouts.CODES.mapNotNull { code ->
+                val f = java.io.File(filesDir, "bigrams_$code.txt")
+                val n = if (f.exists()) f.readLines().size else 0
+                if (n > 0) "${code.uppercase()}: $n parells" else null
+            }
+            text = if (lines.isEmpty()) "Registre de bigrams: buit"
+            else "Registre de bigrams: " + lines.joinToString(" · ")
+            textSize = 14f
+            setTextColor(Color.GRAY)
+            setPadding(0, 24, 0, 0)
+        })
+
         root.addView(Button(this).apply {
             text = "Esborra el registre de bigrams"
             setOnClickListener {
@@ -391,8 +517,21 @@ class SettingsActivity : AppCompatActivity() {
             }
         })
 
+        root.addView(Button(this).apply {
+            text = "Veure el registre (requereix desbloqueig)"
+            setOnClickListener {
+                val km = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+                val intent = km.createConfirmDeviceCredentialIntent(
+                    "Desbloqueig necessari",
+                    "Introdueix el patró, PIN o contrasenya per veure el registre de bigrams"
+                )
+                if (intent != null) startActivityForResult(intent, reqUnlock)
+                else showRegister()
+            }
+        })
+
         root.addView(TextView(this).apply {
-            text = "Idiomes del cicle (tap al codi del lliscador)"
+            text = "Idiomes del cicle (tap a la càpsula del teclat)"
             textSize = 17f
             setTextColor(Color.WHITE)
             setPadding(0, 32, 0, 8)
@@ -406,10 +545,7 @@ class SettingsActivity : AppCompatActivity() {
                 setOnCheckedChangeListener { _, checked ->
                     if (checked) { if (code !in enabledLangs) enabledLangs.add(code) }
                     else { enabledLangs.remove(code) }
-                    if (enabledLangs.isEmpty()) {
-                        isChecked = true
-                        enabledLangs.add(code)
-                    }
+                    if (enabledLangs.isEmpty()) { isChecked = true; enabledLangs.add(code) }
                     prefs.edit().putString(
                         Prefs.KEY_LANGS,
                         Layouts.CODES.filter { it in enabledLangs }.joinToString(",")
@@ -426,6 +562,39 @@ class SettingsActivity : AppCompatActivity() {
         })
 
         setContentView(scroll)
+    }
+
+    @Deprecated("API antiga però suficient per al prototip.")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == reqUnlock && resultCode == RESULT_OK) showRegister()
+    }
+
+    private fun showRegister() {
+        val sb = StringBuilder()
+        for (code in Layouts.CODES) {
+            val f = java.io.File(filesDir, "bigrams_$code.txt")
+            if (f.exists()) {
+                sb.appendLine("===== ${code.uppercase()} =====")
+                sb.append(f.readText())
+                sb.appendLine()
+            }
+        }
+        val view = ScrollView(this).apply {
+            setBackgroundColor(Color.parseColor("#222222"))
+            addView(TextView(this@SettingsActivity).apply {
+                text = if (sb.isEmpty()) "Registre buit" else sb.toString()
+                textSize = 12f
+                setTextColor(Color.WHITE)
+                setPadding(32, 32, 32, 32)
+                setTextIsSelectable(true)
+            })
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Registre de bigrams")
+            .setView(view)
+            .setPositiveButton("Tanca", null)
+            .show()
     }
 }
 
@@ -458,7 +627,6 @@ class ThumbImeService : InputMethodService() {
                 val before = ic.getTextBeforeCursor(5000, 0)?.toString()
                 val after = ic.getTextAfterCursor(5000, 0)?.toString()
                 if (before == null || after == null) return
-
                 val chars = if (!wordMode) delta
                 else if (delta > 0) {
                     var pos = 0
@@ -477,7 +645,6 @@ class ThumbImeService : InputMethodService() {
                     }
                     pos - before.length
                 }
-
                 val clamped = chars.coerceIn(-before.length, after.length)
                 if (clamped == 0) return
                 val code = if (clamped < 0) KeyEvent.KEYCODE_DPAD_LEFT
@@ -494,16 +661,55 @@ class ThumbImeService : InputMethodService() {
 
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
+
+        // Fallback d'onboarding: IME activat sense haver obert mai l'app.
+        if (!Prefs.onboarded(this)) {
+            val sys = resources.configuration.locales.get(0)?.language ?: "ca"
+            val code = if (sys in Layouts.CODES) sys else "ca"
+            Prefs.setLang(this, code)
+            Prefs.setOnboarded(this, true)
+        }
+
         gridView?.reloadPrefs()
+        gridView?.sensitiveField = isSensitiveField(info)
+    }
+
+    /** Refresc de la preview de majúscula quan el cursor canvia de lloc. */
+    override fun onUpdateSelection(
+        oldSelStart: Int, oldSelEnd: Int,
+        newSelStart: Int, newSelEnd: Int,
+        candidatesStart: Int, candidatesEnd: Int
+    ) {
+        super.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd,
+            candidatesStart, candidatesEnd)
+        gridView?.invalidate()
+    }
+
+    private fun isSensitiveField(info: EditorInfo?): Boolean {
+        val type = info?.inputType ?: return false
+        val cls = type and InputType.TYPE_MASK_CLASS
+        val variation = type and InputType.TYPE_MASK_VARIATION
+        val textSensitive = cls == InputType.TYPE_CLASS_TEXT && (
+                variation == InputType.TYPE_TEXT_VARIATION_PASSWORD ||
+                        variation == InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD ||
+                        variation == InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD ||
+                        variation == InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS ||
+                        variation == InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS ||
+                        variation == InputType.TYPE_TEXT_VARIATION_URI
+                )
+        val numberSensitive = cls == InputType.TYPE_CLASS_NUMBER &&
+                variation == InputType.TYPE_NUMBER_VARIATION_PASSWORD
+        return textSensitive || numberSensitive
     }
 }
 
 class DualGridView(context: Context) : View(context) {
 
     var textTarget: TextTarget? = null
+    var sensitiveField = false
 
     private enum class GridSide { LEFT, RIGHT }
-    private enum class Zone { LEFT, RIGHT, SPACE, BAR, SLIDER, LANG }
+    private enum class Zone { LEFT, RIGHT, SPACE, BAR, SLIDER, CAPSULE }
     private enum class ShiftMode { OFF, ONCE, CAPS }
 
     private val barPages = listOf(
@@ -566,6 +772,21 @@ class DualGridView(context: Context) : View(context) {
     private var marginBottomPct = Prefs.marginBottom(context)
     private var lang = Prefs.lang(context)
     private var layout = Layouts.forLang(lang)
+    private var theme = Themes.current(context)
+
+    // Escala de disseny: el llenç de referència fa 430 unitats d'amplada.
+    private var scale = 1f
+    private fun px(v: Float) = v * scale * resources.displayMetrics.density
+
+    private val fontRegular: Typeface by lazy { loadFont("outfit_400.ttf") }
+    private val fontMedium: Typeface by lazy { loadFont("outfit_500.ttf") }
+    private val fontSemiBold: Typeface by lazy { loadFont("outfit_600.ttf") }
+
+    private fun loadFont(name: String): Typeface = try {
+        Typeface.createFromAsset(context.assets, "fonts/$name")
+    } catch (e: Exception) {
+        Typeface.DEFAULT
+    }
 
     fun reloadPrefs() {
         heightFraction = Prefs.height(context)
@@ -585,54 +806,28 @@ class DualGridView(context: Context) : View(context) {
         marginBottomPct = Prefs.marginBottom(context)
         lang = Prefs.lang(context)
         layout = Layouts.forLang(lang)
+        theme = Themes.current(context)
+        scale = (resources.displayMetrics.widthPixels /
+                resources.displayMetrics.density) / 430f
         requestLayout()
         invalidate()
     }
 
-    private val highlightPaints = listOf(
-        Color.parseColor("#6633B5E5"),
-        Color.parseColor("#66FF8800"),
-        Color.parseColor("#66AA00FF"),
-        Color.parseColor("#6600CC44")
-    ).map { color ->
-        Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = color; style = Paint.Style.FILL }
+    init {
+        scale = (resources.displayMetrics.widthPixels /
+                resources.displayMetrics.density) / 430f
     }
-
-    private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#CCFFFFFF"); style = Paint.Style.STROKE; strokeWidth = 6f
-    }
-    private val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#555555"); style = Paint.Style.STROKE; strokeWidth = 4f
-    }
-    private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.WHITE; textSize = 56f; textAlign = Paint.Align.CENTER
-    }
-    private val letterPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.WHITE; textSize = 56f; textAlign = Paint.Align.CENTER
-    }
-    private val hintPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#999999"); textSize = 26f; textAlign = Paint.Align.CENTER
-    }
-    private val hintKeyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#8A8A8A"); textSize = 26f; textAlign = Paint.Align.CENTER
-    }
-    private val langPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#FFB74D"); textSize = 30f
-        textAlign = Paint.Align.LEFT; strokeWidth = 5f
-    }
-
-    init { setBackgroundColor(Color.parseColor("#111111")) }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val mode = MeasureSpec.getMode(heightMeasureSpec)
         val size = MeasureSpec.getSize(heightMeasureSpec)
         val desired = (resources.displayMetrics.heightPixels * heightFraction).toInt()
-        val height = when (mode) {
+        val h = when (mode) {
             MeasureSpec.EXACTLY -> size
             MeasureSpec.AT_MOST -> minOf(desired, size)
             else -> desired
         }
-        setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), height)
+        setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), h)
     }
 
     override fun onDetachedFromWindow() {
@@ -640,36 +835,51 @@ class DualGridView(context: Context) : View(context) {
         activePointers.keys.toList().forEach { stopEdgeRepeat(it) }
     }
 
-    private val gapActive: Boolean get() = gapFraction >= 0.08f
-
     private data class Geo(
-        val barHeight: Float,
-        val stripHeight: Float,
-        val sliderHeight: Float,
+        val barHeight: Float, val sliderZone: Float,
+        val sliderTop: Float, val sliderH: Float,
         val gridTop: Float,
-        val gridHeight: Float,
-        val gridWidth: Float,
-        val gapLeft: Float,
-        val gapRight: Float,
-        val contentLeft: Float,
-        val contentWidth: Float
+        val rowH: Float, val colW: Float, val gapU: Float,
+        val padH: Float, val padV: Float,
+        val gapLeft: Float, val gapRight: Float, val pillW: Float,
+        val contentLeft: Float, val contentWidth: Float,
+        val capsuleTop: Float, val capsuleH: Float
     )
 
     private fun geo(): Geo {
-        val barHeight = if (barVisible) height * 0.16f else 0f
-        // El marge inferior ÉS la zona de la barra: si creix, la barra creix
-        val sliderHeight = height * (marginBottomPct / 100f)
-        val stripHeight = if (gapActive) 0f else (height - barHeight - sliderHeight) * 0.20f
+        val padH = px(8f); val padV = px(8f); val gapU = px(8f)
+        val barHeight = if (barVisible) px(48f) else 0f
+        val sliderZone = px(64f)
+        val sliderH = px(32f)
         val gridTop = barHeight
-        val gridHeight = height - barHeight - stripHeight - sliderHeight
+        val gridH = height - barHeight - sliderZone
         val contentLeft = width * (marginLeftPct / 100f)
         val contentWidth = width - contentLeft - width * (marginRightPct / 100f)
-        val gap = contentWidth * gapFraction
-        val gridWidth = (contentWidth - gap) / 2f
-        val gapLeft = contentLeft + gridWidth
-        return Geo(barHeight, stripHeight, sliderHeight, gridTop, gridHeight,
-            gridWidth, gapLeft, gapLeft + gap, contentLeft, contentWidth)
+        val avail = contentWidth - 2 * padH
+        val pillW = maxOf(px(24f), contentWidth * gapFraction)
+        val colW = (avail - pillW - 6 * gapU) / 6f
+        val gridW = 3 * colW + 2 * gapU
+        val gapLeft = contentLeft + padH + gridW + gapU
+        val gapRight = gapLeft + pillW
+        val rowH = (gridH - 2 * padV - 2 * gapU) / 3f
+        val sliderTop = height - sliderZone + (sliderZone - sliderH) / 2f
+        val capsuleH = px(20f)
+        val capsuleTop = height - sliderZone + ((sliderZone - sliderH) / 2f - capsuleH) / 2f
+        return Geo(barHeight, sliderZone, sliderTop, sliderH, gridTop, rowH, colW, gapU,
+            padH, padV, gapLeft, gapRight, pillW, contentLeft, contentWidth,
+            capsuleTop, capsuleH)
     }
+
+    private fun cellRect(g: Geo, side: GridSide, row: Int, col: Int): RectF {
+        val originX = if (side == GridSide.LEFT) g.contentLeft + g.padH
+        else g.gapRight + g.gapU
+        val x = originX + col * (g.colW + g.gapU)
+        val y = g.gridTop + g.padV + row * (g.rowH + g.gapU)
+        return RectF(x, y, x + g.colW, y + g.rowH)
+    }
+
+    private fun capsuleWidth(): Float =
+        langPaint.measureText(lang.uppercase()) + px(16f)
 
     private fun keyAt(side: GridSide, row: Int, col: Int): KeyDef {
         val list = if (side == GridSide.LEFT) layout.left else layout.right
@@ -713,7 +923,9 @@ class DualGridView(context: Context) : View(context) {
         if (autoSpace && out.length == 1 && out[0] in autoSpaceChars) {
             textTarget?.commit(" ")
         }
-        if (bigramsEnabled && out.length == 1 && out[0].isLetter()) {
+        // Escriure text nou invalida l'historial de refer (com qualsevol editor)
+        undoStack.clear()
+        if (bigramsEnabled && !sensitiveField && out.length == 1 && out[0].isLetter()) {
             val cur = out.lowercase()
             lastLetter?.let { prev -> logBigram(prev, cur) }
             lastLetter = cur
@@ -722,8 +934,6 @@ class DualGridView(context: Context) : View(context) {
         }
         invalidate()
     }
-
-    // ----- Auto-repetit accelerat quan mantens el dit a la vora -----
 
     private fun startEdgeRepeat(id: Int, leftward: Boolean) {
         val state = activePointers[id] ?: return
@@ -752,22 +962,56 @@ class DualGridView(context: Context) : View(context) {
         activePointers[id]?.edgeRunnable = null
     }
 
-    /** Dibuixa, en petit, el caràcter de cada gest a la vora corresponent. */
+    /** Ombra suau falsa (3 capes) compatible amb acceleració per hardware. */
+    private fun drawSoftShadow(canvas: Canvas, r: RectF, radius: Float) {
+        val alphas = intArrayOf(0x14, 0x0F, 0x0A)
+        for (i in alphas.indices) {
+            val dy = px(2f) * (i + 1)
+            val grow = px(1f) * i
+            shadowPaint.color = theme.shadowColor
+            shadowPaint.alpha = alphas[i]
+            canvas.drawRoundRect(
+                r.left - grow, r.top - grow + dy,
+                r.right + grow, r.bottom + grow + dy,
+                radius, radius, shadowPaint
+            )
+        }
+    }
+
+    private val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+
+    private val keycapPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE; strokeWidth = 6f
+        color = Color.parseColor("#CCFFFFFF")
+    }
+    private val tickPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE; strokeWidth = 2f
+    }
+    private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
+    private val letterPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
+    private val hintPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
+    private val hintKeyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
+    private val langPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
+
     private fun drawHints(
-        canvas: Canvas, key: KeyDef,
-        left: Float, top: Float, cellW: Float, cellH: Float
+        canvas: Canvas, key: KeyDef, r: RectF, capsVisual: Boolean
     ) {
+        hintKeyPaint.color = theme.hint
+        hintKeyPaint.textSize = px(13f)
+        hintKeyPaint.typeface = fontRegular
         val yC = -(hintKeyPaint.descent() + hintKeyPaint.ascent()) / 2f
-        for ((dir, ch) in key.swipes) {
+        for ((dir, raw) in key.swipes) {
+            val ch = if (capsVisual) raw.uppercase() else raw
             val cx = when (dir) {
-                SwipeDir.N, SwipeDir.S -> left + cellW / 2f
-                SwipeDir.NE, SwipeDir.E, SwipeDir.SE -> left + cellW * 0.84f
-                else -> left + cellW * 0.16f
+                SwipeDir.N, SwipeDir.S -> r.centerX()
+                SwipeDir.NE, SwipeDir.E, SwipeDir.SE -> r.right - r.width() * 0.16f
+                else -> r.left + r.width() * 0.16f
             }
             val cy = when (dir) {
-                SwipeDir.N, SwipeDir.NE, SwipeDir.NW -> top + cellH * 0.14f
-                SwipeDir.S, SwipeDir.SE, SwipeDir.SW -> top + cellH * 0.90f
-                else -> top + cellH / 2f
+                SwipeDir.N, SwipeDir.NE, SwipeDir.NW -> r.top + r.height() * 0.14f
+                SwipeDir.S, SwipeDir.SE, SwipeDir.SW -> r.bottom - r.height() * 0.10f
+                else -> r.centerY()
             }
             canvas.drawText(ch, cx, cy + yC, hintKeyPaint)
         }
@@ -778,101 +1022,113 @@ class DualGridView(context: Context) : View(context) {
         if (width == 0 || height == 0) return
 
         val g = geo()
-        val cellW = g.gridWidth / 3f
-        val cellH = g.gridHeight / 3f
-        val yCenter = -(textPaint.descent() + textPaint.ascent()) / 2f
-        val centerX = g.contentLeft + g.contentWidth / 2f
+        val capsVisual = shiftMode != ShiftMode.OFF || shouldAutoCap()
 
-        // Barra superior de capes
+        // Fons del teclat
+        canvas.drawColor(theme.role[Themes.BG])
+
+        // Franja superior: barra de capes (substitueix els suggeriments)
         if (g.barHeight > 0f) {
+            canvas.drawRect(0f, 0f, width.toFloat(), g.barHeight,
+                keycapPaint.apply { color = theme.role[Themes.STRIP] })
             val cw = g.contentWidth / 10f
             val page = barPages[barPage]
+            textPaint.color = theme.text
+            textPaint.textSize = px(20f)
+            textPaint.typeface = fontMedium
+            val yC = -(textPaint.descent() + textPaint.ascent()) / 2f
             for (i in 0..9) {
                 canvas.drawText(page[i], g.contentLeft + i * cw + cw / 2f,
-                    g.barHeight / 2f + yCenter, textPaint)
+                    g.barHeight / 2f + yC, textPaint)
             }
-            canvas.drawLine(g.contentLeft, g.barHeight,
-                g.contentLeft + g.contentWidth, g.barHeight, gridPaint)
+            hintPaint.color = theme.hint
+            hintPaint.textSize = px(10f)
             for (p in barPages.indices) {
-                val dotX = centerX + (p - 1) * 40f
-                val dotPaint = if (p == barPage) textPaint else hintPaint
-                canvas.drawText("•", dotX, g.barHeight - 14f, dotPaint)
+                val dotX = g.contentLeft + g.contentWidth / 2f + (p - 1) * px(14f)
+                hintPaint.alpha = if (p == barPage) 255 else 120
+                canvas.drawText("•", dotX, g.barHeight - px(6f), hintPaint)
+            }
+            hintPaint.alpha = 255
+        }
+
+        // Keycaps de les dues graelles
+        val radius = px(16f)
+        for (side in listOf(GridSide.LEFT, GridSide.RIGHT)) {
+            for (row in 0..2) {
+                for (col in 0..2) {
+                    val r = cellRect(g, side, row, col)
+                    if (theme.keycapShadow) drawSoftShadow(canvas, r, radius)
+                    keycapPaint.color = theme.role[Themes.KEYCAP]
+                    canvas.drawRoundRect(r, radius, radius, keycapPaint)
+
+                    val key = keyAt(side, row, col)
+                    letterPaint.color = theme.text
+                    letterPaint.textSize = px(28f)
+                    letterPaint.typeface = if (capsVisual) fontSemiBold else fontMedium
+                    val yC = -(letterPaint.descent() + letterPaint.ascent()) / 2f
+                    val label = if (capsVisual) key.tap.uppercase() else key.tap
+                    canvas.drawText(label, r.centerX(), r.centerY() + yC, letterPaint)
+
+                    if (showHints) drawHints(canvas, key, r, capsVisual)
+                }
             }
         }
 
-        // Franja d'espai (només si el gap és estret)
-        if (g.stripHeight > 0f) {
-            val top = height - g.sliderHeight - g.stripHeight
-            canvas.drawLine(g.contentLeft, top, g.contentLeft + g.contentWidth, top, gridPaint)
-            canvas.drawText("␣ · ← esborra · → refa · ↓ enter · ↑ majúscula",
-                centerX, top + g.stripHeight / 2f + yCenter, hintPaint)
+        // Pill del gap (espai)
+        val pillRect = RectF(g.gapLeft, g.gridTop + g.padV,
+            g.gapRight, g.gridTop + g.padV + 3 * g.rowH + 2 * g.gapU)
+        if (theme.keycapShadow) drawSoftShadow(canvas, pillRect, g.pillW / 2f)
+        keycapPaint.color = theme.role[Themes.KEYCAP]
+        canvas.drawRoundRect(pillRect, g.pillW / 2f, g.pillW / 2f, keycapPaint)
+        hintPaint.color = theme.hint
+        hintPaint.textSize = px(18f)
+        hintPaint.typeface = fontRegular
+        val pillYC = -(hintPaint.descent() + hintPaint.ascent()) / 2f
+        canvas.drawText("␣", pillRect.centerX(), pillRect.centerY() + pillYC, hintPaint)
+
+        // Càpsula d'idioma entre la graella i el lliscador
+        val capW = capsuleWidth()
+        val capRect = RectF(g.contentLeft + px(8f), g.capsuleTop,
+            g.contentLeft + px(8f) + capW, g.capsuleTop + g.capsuleH)
+        keycapPaint.color = theme.role[Themes.SPECIAL]
+        canvas.drawRoundRect(capRect, g.capsuleH / 2f, g.capsuleH / 2f, keycapPaint)
+        langPaint.color = theme.text
+        langPaint.textSize = px(12f)
+        langPaint.typeface = fontMedium
+        val capYC = -(langPaint.descent() + langPaint.ascent()) / 2f
+        canvas.drawText(lang.uppercase(), capRect.centerX(), capRect.centerY() + capYC, langPaint)
+
+        // Lliscador inferior amb franges i knob central
+        val sliderRect = RectF(g.contentLeft + px(16f), g.sliderTop,
+            g.contentLeft + g.contentWidth - px(16f), g.sliderTop + g.sliderH)
+        keycapPaint.color = theme.role[Themes.SLIDER]
+        canvas.drawRoundRect(sliderRect, g.sliderH / 2f, g.sliderH / 2f, keycapPaint)
+        tickPaint.color = theme.hint
+        tickPaint.alpha = 110
+        val tickSpacing = px(12f)
+        var tx = sliderRect.left + tickSpacing
+        while (tx < sliderRect.right - tickSpacing) {
+            canvas.drawLine(tx, sliderRect.centerY() - px(6f),
+                tx, sliderRect.centerY() + px(6f), tickPaint)
+            tx += tickSpacing
+        }
+        tickPaint.alpha = 255
+        val knobD = px(40f)
+        val knobRect = RectF(sliderRect.centerX() - knobD / 2f, sliderRect.centerY() - knobD / 2f,
+            sliderRect.centerX() + knobD / 2f, sliderRect.centerY() + knobD / 2f)
+        drawSoftShadow(canvas, knobRect, knobD / 2f)
+        keycapPaint.color = theme.role[Themes.KNOB]
+        canvas.drawRoundRect(knobRect, knobD / 2f, knobD / 2f, keycapPaint)
+        tickPaint.color = theme.hint
+        for (i in -1..1) {
+            val bx = knobRect.centerX() + i * px(6f)
+            canvas.drawLine(bx, knobRect.centerY() - px(8f),
+                bx, knobRect.centerY() + px(8f), tickPaint)
         }
 
-        // Gap com a espai
-        if (gapActive) {
-            canvas.drawText("␣", (g.gapLeft + g.gapRight) / 2f,
-                g.gridTop + g.gridHeight / 2f + yCenter, textPaint)
-        }
-
-        // Lliscador de cursor a sota de tot
-        val sliderTop = height - g.sliderHeight
-        canvas.drawLine(g.contentLeft, sliderTop, g.contentLeft + g.contentWidth, sliderTop, gridPaint)
-        canvas.drawText(
-            "⇔ cursor · tap centre: 123 · doble: símbols · tap ${lang.uppercase()}: idioma",
-            centerX, sliderTop + g.sliderHeight / 2f + yCenter, hintPaint)
-
-        // Botó d'idioma a l'extrem esquerre del lliscador
-        val langBtn = g.contentWidth * 0.16f
-        canvas.drawText(lang.uppercase(), g.contentLeft + 24f,
-            sliderTop + g.sliderHeight / 2f + yCenter, langPaint)
-        canvas.drawLine(g.contentLeft + 16f, height - 12f,
-            g.contentLeft + langBtn - 16f, height - 12f, langPaint)
-
-        // Ressalts i vectors dels dits actius
+        // Vectors de gest actius
         for (state in activePointers.values) {
-            if (state.side != null) {
-                val paint = highlightPaints[state.pointerId % highlightPaints.size]
-                val offset = if (state.side == GridSide.LEFT) g.contentLeft else g.gapRight
-                val left = offset + state.originCol * cellW
-                val top = g.gridTop + state.originRow * cellH
-                canvas.drawRect(left, top, left + cellW, top + cellH, paint)
-            }
             canvas.drawLine(state.startX, state.startY, state.currentX, state.currentY, linePaint)
-        }
-
-        // Línies de les dues graelles
-        for (grid in 0..1) {
-            val offset = if (grid == 0) g.contentLeft else g.gapRight
-            for (i in 0..3) {
-                val x = offset + i * cellW
-                canvas.drawLine(x, g.gridTop, x, g.gridTop + g.gridHeight, gridPaint)
-                val y = g.gridTop + i * cellH
-                canvas.drawLine(offset, y, offset + g.gridWidth, y, gridPaint)
-            }
-        }
-
-        // Lletres + pistes de gestos
-        val capsVisual = shiftMode != ShiftMode.OFF || shouldAutoCap()
-        letterPaint.color =
-            if (shiftMode == ShiftMode.CAPS) Color.parseColor("#FFB74D") else Color.WHITE
-
-        for (row in 0..2) {
-            for (col in 0..2) {
-                val cy = g.gridTop + row * cellH + cellH / 2f + yCenter
-                val cellTop = g.gridTop + row * cellH
-
-                val lk = layout.left[row * 3 + col]
-                canvas.drawText(
-                    if (capsVisual) lk.tap.uppercase() else lk.tap,
-                    g.contentLeft + col * cellW + cellW / 2f, cy, letterPaint)
-                if (showHints) drawHints(canvas, lk, g.contentLeft + col * cellW, cellTop, cellW, cellH)
-
-                val rk = layout.right[row * 3 + col]
-                canvas.drawText(
-                    if (capsVisual) rk.tap.uppercase() else rk.tap,
-                    g.gapRight + col * cellW + cellW / 2f, cy, letterPaint)
-                if (showHints) drawHints(canvas, rk, g.gapRight + col * cellW, cellTop, cellW, cellH)
-            }
         }
     }
 
@@ -880,8 +1136,6 @@ class DualGridView(context: Context) : View(context) {
         if (width == 0 || height == 0) return true
 
         val g = geo()
-        val cellW = g.gridWidth / 3f
-        val cellH = g.gridHeight / 3f
         val edgeZone = 24 * resources.displayMetrics.density
 
         when (event.actionMasked) {
@@ -895,27 +1149,37 @@ class DualGridView(context: Context) : View(context) {
                 var side: GridSide? = null
                 var row = 0; var col = 0; var cellIndex = 0
 
+                val capW = capsuleWidth()
+                val capExtra = px(12f)
                 when {
                     g.barHeight > 0f && y < g.barHeight -> {
                         zone = Zone.BAR
                         cellIndex = ((x - g.contentLeft) / (g.contentWidth / 10f))
                             .toInt().coerceIn(0, 9)
                     }
-                    y > height - g.sliderHeight -> {
-                        zone = if (x < g.contentLeft + g.contentWidth * 0.16f) Zone.LANG
-                        else Zone.SLIDER
+                    y > height - g.sliderZone && y < g.sliderTop -> {
+                        zone = Zone.CAPSULE
                     }
-                    g.stripHeight > 0f && y > height - g.sliderHeight - g.stripHeight ->
-                        zone = Zone.SPACE
-                    gapActive && x >= g.gapLeft && x <= g.gapRight -> zone = Zone.SPACE
-                    else -> {
-                        side = if (x < width / 2f) GridSide.LEFT else GridSide.RIGHT
-                        zone = if (side == GridSide.LEFT) Zone.LEFT else Zone.RIGHT
-                        val localX = if (side == GridSide.LEFT) x - g.contentLeft
-                        else x - g.gapRight
-                        col = (localX / cellW).toInt().coerceIn(0, 2)
-                        row = ((y - g.gridTop) / cellH).toInt().coerceIn(0, 2)
+                    y >= g.sliderTop - capExtra && y <= g.sliderTop + g.sliderH + capExtra &&
+                            x >= g.contentLeft && x <= g.contentLeft + px(8f) + capW + capExtra -> {
+                        zone = Zone.CAPSULE
                     }
+                    y >= g.sliderTop - capExtra -> {
+                        zone = Zone.SLIDER
+                    }
+                    x < g.gapLeft && x >= g.contentLeft -> {
+                        side = GridSide.LEFT
+                        zone = Zone.LEFT
+                        col = ((x - (g.contentLeft + g.padH)) / (g.colW + g.gapU)).toInt().coerceIn(0, 2)
+                        row = ((y - (g.gridTop + g.padV)) / (g.rowH + g.gapU)).toInt().coerceIn(0, 2)
+                    }
+                    x > g.gapRight && x <= g.contentLeft + g.contentWidth -> {
+                        side = GridSide.RIGHT
+                        zone = Zone.RIGHT
+                        col = ((x - (g.gapRight + g.gapU)) / (g.colW + g.gapU)).toInt().coerceIn(0, 2)
+                        row = ((y - (g.gridTop + g.padV)) / (g.rowH + g.gapU)).toInt().coerceIn(0, 2)
+                    }
+                    else -> zone = Zone.SPACE
                 }
 
                 activePointers[id] = PointerState(
@@ -940,11 +1204,11 @@ class DualGridView(context: Context) : View(context) {
                     state.currentX = x
                     state.currentY = y
 
-                    val pxPerCursorUnit = if (cursorWord) width * 5f / sensChars
-                    else width / sensChars
+                    val pxPerCursorUnit =
+                        if (cursorWord) width * 5f / sensChars else width / sensChars
                     val pxPerEraseUnit = width / sensErase
 
-                    if (state.zone == Zone.SLIDER || state.zone == Zone.LANG) {
+                    if (state.zone == Zone.SLIDER) {
                         state.cursorAcc += dxEvent * mult / pxPerCursorUnit
                         val n = state.cursorAcc.toInt()
                         if (n != 0) {
@@ -953,8 +1217,6 @@ class DualGridView(context: Context) : View(context) {
                         }
                     } else if (state.zone == Zone.SPACE) {
                         val dx = x - state.startX
-
-                        // Mantingut a la vora => auto-repetit accelerat
                         if (x <= edgeZone && dx < 0) startEdgeRepeat(id, true)
                         else if (x >= width - edgeZone && dx > 0) startEdgeRepeat(id, false)
                         else stopEdgeRepeat(id)
@@ -968,10 +1230,7 @@ class DualGridView(context: Context) : View(context) {
                                     state.eraseAcc -= n
                                     repeat(n) {
                                         val ch = textTarget?.deleteBefore() ?: ""
-                                        if (ch.isNotEmpty()) {
-                                            undoStack.addLast(ch)
-                                            state.deleted++
-                                        }
+                                        if (ch.isNotEmpty()) { undoStack.addLast(ch); state.deleted++ }
                                     }
                                 }
                             } else if (dxEvent > 0f) {
@@ -1032,16 +1291,15 @@ class DualGridView(context: Context) : View(context) {
                 }
             }
 
-            Zone.LANG -> {
+            Zone.CAPSULE -> {
                 if (dir == SwipeDir.TAP) cycleLang()
             }
 
             Zone.SLIDER -> {
                 if (dir == SwipeDir.TAP) {
-                    val contentLeft = width * (marginLeftPct / 100f)
-                    val contentWidth = width - contentLeft - width * (marginRightPct / 100f)
-                    val inCenter = state.startX > contentLeft + contentWidth / 3f &&
-                            state.startX < contentLeft + 2f * contentWidth / 3f
+                    val g = geo()
+                    val inCenter = state.startX > g.contentLeft + g.contentWidth / 3f &&
+                            state.startX < g.contentLeft + 2f * g.contentWidth / 3f
                     if (inCenter) {
                         val now = SystemClock.uptimeMillis()
                         if (now - lastCenterTapTime < doubleWindowMs.toLong()) {
@@ -1061,8 +1319,7 @@ class DualGridView(context: Context) : View(context) {
             Zone.SPACE -> when (dir) {
                 SwipeDir.TAP -> {
                     val b = textTarget?.peekBefore(2) ?: ""
-                    val blocked = autoSpace && b.length == 2 &&
-                            b[1] == ' ' && b[0] in autoSpaceChars
+                    val blocked = autoSpace && b.length == 2 && b[1] == ' ' && b[0] in autoSpaceChars
                     if (!blocked) textTarget?.commit(" ")
                 }
                 SwipeDir.W -> {
