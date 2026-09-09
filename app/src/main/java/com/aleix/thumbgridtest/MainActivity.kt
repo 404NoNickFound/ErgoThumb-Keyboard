@@ -67,6 +67,7 @@ object Prefs {
     const val KEY_ANIM_SCALE = "anim_scale"
     const val KEY_VMAX = "vmax_cps"
     const val KEY_CASE_MS = "case_ms"
+
     const val DEFAULT_HEIGHT = 0.35f
     const val DEFAULT_GAP = 0.10f
     const val DEFAULT_THRESHOLD_DP = 24f
@@ -470,6 +471,7 @@ class SettingsActivity : AppCompatActivity() {
         slider("Durada de l'empenyiment de caixa", 0, 500, Prefs.caseMs(this).toInt(),
             { if (it < 150) "instantani (<150 ms)" else "$it ms" })
         { v -> prefs.edit().putFloat(Prefs.KEY_CASE_MS, v.toFloat()).apply() }
+
         root.addView(CheckBox(this).apply {
             text = "Majúscula automàtica"
             setTextColor(Color.WHITE)
@@ -829,6 +831,7 @@ class DualGridView(context: Context) : View(context) {
     private var lastLetter: String? = null
 
     private var lastCapsVisual = false
+    private var caseInitialized = false
     private var caseAnimStart = -1L
     private var caseFromUpper = false
 
@@ -839,7 +842,9 @@ class DualGridView(context: Context) : View(context) {
     private var knobSpringStart = -1L
     private var knobSpringFrom = 0f
     private var tickOffset = 0f
-    private var pillDownSince = -1L
+
+    // Flash del pill derivat dels pointers vius: impossible que quedi penjat
+    private var pillWasDown = false
     private var pillReleasedAt = -1L
 
     private var heightFraction = Prefs.height(context)
@@ -976,6 +981,8 @@ class DualGridView(context: Context) : View(context) {
         if (capsuleAnimStart >= 0L && t01(capsuleAnimStart, dur(150), now) < 1f) return true
         if (knobSpringStart >= 0L && t01(knobSpringStart, dur(200), now) < 1f) return true
         if (activePointers.values.any { it.knobDrag }) return true
+        if (pillWasDown) return true
+        if (pillReleasedAt >= 0L && t01(pillReleasedAt, fbDur(), now) < 1f) return true
         return false
     }
 
@@ -1130,6 +1137,16 @@ class DualGridView(context: Context) : View(context) {
         tickOffset += n * px(12f)
     }
 
+    private val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+    }
+    private val iconBasePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+
+    private fun iconColor(): Int =
+        if (theme.isDark) 0xFFFFFFFF.toInt() else 0xFF111111.toInt()
+
     private fun drawIcon(
         c: Canvas, ic: Icon, cx: Float, cy: Float, s: Float,
         withBase: Boolean = false, alpha: Int = 255
@@ -1181,7 +1198,6 @@ class DualGridView(context: Context) : View(context) {
                 c.drawLine(cx + h * 0.4f, cy - h * 0.25f, cx - h * 0.15f, cy + h * 0.25f, iconPaint)
             }
             Icon.REDO -> {
-                // U-turn: puja per l'esquerra, volta per dalt i baixa per la dreta amb punta
                 path.moveTo(cx - h * 0.5f, cy + h * 0.6f)
                 path.lineTo(cx - h * 0.5f, cy - h * 0.1f)
                 path.cubicTo(
@@ -1214,16 +1230,6 @@ class DualGridView(context: Context) : View(context) {
     private val hintKeyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
     private val langPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
 
-    private val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeCap = Paint.Cap.ROUND
-        strokeJoin = Paint.Join.ROUND
-    }
-    private val iconBasePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-
-    /** Color literal, sense dependre de cap token compartit: blanc en fosc, negre en clar. */
-    private fun iconColor(): Int =
-        if (theme.isDark) 0xFFFFFFFF.toInt() else 0xFF111111.toInt()
     private fun drawSoftShadow(canvas: Canvas, r: RectF, radius: Float) {
         val alphas = intArrayOf(0x14, 0x0F, 0x0A)
         for (i in alphas.indices) {
@@ -1242,9 +1248,9 @@ class DualGridView(context: Context) : View(context) {
 
     private fun drawHints(
         canvas: Canvas, key: KeyDef, r: RectF, capsVisual: Boolean,
-        press: PressAnim?, now: Long
+        press: PressAnim?, now: Long, flashed: Boolean = false
     ) {
-        hintKeyPaint.color = theme.hint
+        hintKeyPaint.color = if (flashed) glyphColor() else theme.hint
         val baseSize = px(13f)
         val yCbase = baseSize * 0.35f
         for ((dir, raw) in key.swipes) {
@@ -1308,7 +1314,10 @@ class DualGridView(context: Context) : View(context) {
             if (!animDepth) { knobSpringStart = -1L; knobP = 0f }
         }
 
-        if (capsVisual != lastCapsVisual) {
+        if (!caseInitialized) {
+            caseInitialized = true
+            lastCapsVisual = capsVisual
+        } else if (capsVisual != lastCapsVisual) {
             caseFromUpper = lastCapsVisual
             caseAnimStart = if (caseDur() > 0L && animStrong) now else -1L
             lastCapsVisual = capsVisual
@@ -1377,16 +1386,12 @@ class DualGridView(context: Context) : View(context) {
                     val dim = dimFor(r)
                     if (dim > 0f) capColor = blendColor(capColor, theme.pole, dim * 0.35f)
 
-                    // Flash: ple mentre el dit hi és; fade només després del release
                     val fb = cellFeedback(side, row, col)
                     val fbT = if (fb != null) t01(fb.start, fbDur(), now) else 1f
-                    var flash = 0f
-                    if (animHelp) {
-                        flash = when {
-                            press != null -> 0.45f
-                            fading != null -> 0.45f * (1f - t01(fading.release, fbDur(), now))
-                            else -> 0f
-                        }
+                    val flash = if (!animHelp) 0f else when {
+                        press != null -> 0.45f
+                        fading != null -> 0.45f * (1f - t01(fading.release, fbDur(), now))
+                        else -> 0f
                     }
                     if (flash > 0f) capColor = blendColor(capColor, theme.flashPole, flash)
 
@@ -1417,8 +1422,6 @@ class DualGridView(context: Context) : View(context) {
                         canvas.drawText(if (capsVisual) upper else lower, r.centerX(), midY, letterPaint)
                         letterPaint.alpha = 255
                     } else if (!lifted && animStrong && caseT < 1f) {
-                        // Empenta en 3 fases: l'entrant puja sol -> contacte i pugen junts ->
-                        // l'entrant s'atura al centre i el sortint acaba de sortir sol
                         val H = r.height()
                         val gap = 0.25f * H
                         val a = 0.4286f
@@ -1458,7 +1461,8 @@ class DualGridView(context: Context) : View(context) {
                     canvas.restore()
 
                     if (showHints && !lifted && fb == null) {
-                        drawHints(canvas, key, r, capsVisual, press, now)
+                        val flashed = animHelp && (press != null || fading != null)
+                        drawHints(canvas, key, r, capsVisual, press, now, flashed)
                     }
                 }
             }
@@ -1504,9 +1508,14 @@ class DualGridView(context: Context) : View(context) {
                 canvas.drawText(label, 0f, 0f, letterPaint)
                 canvas.restore()
 
-                if (fb == null) drawHints(canvas, key, lr, capsVisual, p, now)
+                if (fb == null) drawHints(canvas, key, lr, capsVisual, p, now, flashed = animHelp)
             }
         }
+
+        // ----- pill: flash derivat dels pointers vius (mai no pot quedar penjat) -----
+        val pillDownNow = activePointers.values.any { it.zone == Zone.SPACE }
+        if (!pillDownNow && pillWasDown) pillReleasedAt = now
+        pillWasDown = pillDownNow
 
         val pillRect = RectF(g.gapLeft, g.gridTop + g.padV,
             g.gapRight, g.gridTop + g.padV + 3 * g.rowH + 2 * g.gapU)
@@ -1514,7 +1523,7 @@ class DualGridView(context: Context) : View(context) {
         val pillFb = feedbacks.firstOrNull { it.pill }
         val pillFbT = if (pillFb != null) t01(pillFb.start, fbDur(), now) else 1f
         val pillFlash = if (!animHelp) 0f else when {
-            pillDownSince >= 0 -> 0.45f
+            pillDownNow -> 0.45f
             pillReleasedAt >= 0 -> 0.45f * (1f - t01(pillReleasedAt, fbDur(), now))
             else -> 0f
         }
@@ -1707,10 +1716,6 @@ class DualGridView(context: Context) : View(context) {
                     presses[id] = PressAnim(side, row, col, now)
                     kickAnim()
                 }
-                if (zone == Zone.SPACE && pillDownSince < 0) {
-                    pillDownSince = now
-                    kickAnim()
-                }
             }
 
             MotionEvent.ACTION_MOVE -> {
@@ -1808,10 +1813,6 @@ class DualGridView(context: Context) : View(context) {
                     knobSpringStart = now
                     kickAnim()
                 }
-                if (state.zone == Zone.SPACE) {
-                    pillDownSince = -1L
-                    pillReleasedAt = now
-                }
                 resolvePointer(state)
             }
 
@@ -1823,8 +1824,6 @@ class DualGridView(context: Context) : View(context) {
                 activePointers.clear()
                 knobSpringFrom = knobP
                 knobSpringStart = now
-                pillDownSince = -1L
-                pillReleasedAt = now
                 Log.d("GridTouch", "CANCEL")
             }
         }

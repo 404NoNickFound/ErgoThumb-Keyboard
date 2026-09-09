@@ -1,16 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <input-method xmlns:android="http://schemas.android.com/apk/res/android"
-    android:settingsActivity="com.aleix.thumbgridtest.SettingsActivity">
+    android:settingsActivity="com.aleix.thumbgridtest.SettingsActivity"
+    android:supportsSwitchingToNextInputMethod="true">
     <subtype
-        android:label="Català"
+        android:label="@string/subtype_ca"
         android:imeSubtypeLocale="ca"
         android:imeSubtypeMode="keyboard" />
     <subtype
-        android:label="Castellà"
+        android:label="@string/subtype_es"
         android:imeSubtypeLocale="es"
         android:imeSubtypeMode="keyboard" />
     <subtype
-        android:label="Anglès"
+        android:label="@string/subtype_en"
         android:imeSubtypeLocale="en"
         android:imeSubtypeMode="keyboard" />
 </input-method>
