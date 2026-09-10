@@ -56,6 +56,8 @@ object Prefs {
     const val KEY_BIGRAMS = "bigrams_enabled"
     const val KEY_ONBOARDED = "onboarded"
     const val KEY_APP_LANG = "app_lang"
+    const val KEY_COLOR_DARK = "color_dark"
+    const val KEY_COLOR_LIGHT = "color_light"
 
     const val KEY_MARGIN_SIDE = "margin_side"
     const val KEY_MARGIN_LEFT = "margin_left"
@@ -101,6 +103,8 @@ object Prefs {
     fun onboarded(ctx: Context) = prefs(ctx).getBoolean(KEY_ONBOARDED, false)
     fun setOnboarded(ctx: Context, v: Boolean) = prefs(ctx).edit().putBoolean(KEY_ONBOARDED, v).apply()
     fun appLang(ctx: Context) = prefs(ctx).getString(KEY_APP_LANG, "ca") ?: "ca"
+    fun colorDark(ctx: Context) = prefs(ctx).getInt(KEY_COLOR_DARK, 0)
+    fun colorLight(ctx: Context) = prefs(ctx).getInt(KEY_COLOR_LIGHT, 0)
 
     fun marginSide(ctx: Context) = prefs(ctx).getFloat(KEY_MARGIN_SIDE, DEFAULT_MARGIN_SIDE)
     fun marginIndep(ctx: Context) = prefs(ctx).getBoolean(KEY_MARGIN_INDEP, false)
@@ -160,6 +164,7 @@ object Themes {
         val isDark: Boolean get() = pole == Color.BLACK
         val flashPole: Int get() = if (isDark) Color.WHITE else Color.BLACK
         val shadowColor: Int get() = if (isDark) Color.BLACK else 0xFF1C1C1E.toInt()
+        fun withPrincipal(c: Int) = Theme(c, pole, text, hint, mixes, keycapShadow)
     }
 
     val DARK = Theme(
@@ -179,7 +184,9 @@ object Themes {
     fun current(ctx: Context): Theme {
         val night = (ctx.resources.configuration.uiMode and
                 Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-        return if (night) DARK else LIGHT
+        val base = if (night) DARK else LIGHT
+        val override = if (night) Prefs.colorDark(ctx) else Prefs.colorLight(ctx)
+        return if (override == 0) base else base.withPrincipal(override)
     }
 }
 
@@ -351,6 +358,16 @@ class SettingsActivity : AppCompatActivity() {
 
     private val reqUnlock = 1234
     private lateinit var root: LinearLayout
+    private lateinit var currentContainer: LinearLayout
+
+    private val swatches = listOf(
+        0,
+        0xFF4C86C8.toInt(),
+        0xFF5BA85A.toInt(),
+        0xFF9A6BB8.toInt(),
+        0xFFD08A3E.toInt(),
+        0xFFC45252.toInt()
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -377,6 +394,9 @@ class SettingsActivity : AppCompatActivity() {
         section(R.string.section_languages)
         languageRow()
         keyboardLangs()
+
+        section(R.string.section_appearance)
+        appearanceBlock()
 
         section(R.string.section_geometry)
         mSlider(R.string.slider_height, 25f, 60f, Prefs.height(this) * 100f,
@@ -448,13 +468,29 @@ class SettingsActivity : AppCompatActivity() {
     private fun putB(key: String, v: Boolean) =
         getSharedPreferences(Prefs.NAME, MODE_PRIVATE).edit().putBoolean(key, v).apply()
 
-    private fun section(titleRes: Int) {
-        root.addView(TextView(this).apply {
-            text = getString(titleRes)
+    private fun add(v: View) {
+        currentContainer.addView(v)
+    }
+
+    private fun section(titleRes: Int, expanded: Boolean = true) {
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = if (expanded) View.VISIBLE else View.GONE
+        }
+        val header = TextView(this).apply {
+            text = (if (expanded) "▼  " else "▶  ") + getString(titleRes)
             textSize = 15f
             setTextColor(Color.parseColor("#8E8E93"))
             setPadding(0, 40, 0, 12)
-        })
+            setOnClickListener {
+                val show = container.visibility == View.GONE
+                container.visibility = if (show) View.VISIBLE else View.GONE
+                text = (if (show) "▼  " else "▶  ") + getString(titleRes)
+            }
+        }
+        root.addView(header)
+        root.addView(container)
+        currentContainer = container
     }
 
     private fun mSwitch(labelRes: Int, current: Boolean, onValue: (Boolean) -> Unit): MaterialSwitch {
@@ -466,7 +502,7 @@ class SettingsActivity : AppCompatActivity() {
             setPadding(0, 16, 0, 16)
             setOnCheckedChangeListener { _, c -> onValue(c) }
         }
-        root.addView(sw)
+        add(sw)
         return sw
     }
 
@@ -490,9 +526,54 @@ class SettingsActivity : AppCompatActivity() {
                 onValue(value)
             }
         }
-        root.addView(tv)
-        root.addView(sl)
+        add(tv)
+        add(sl)
         return sl
+    }
+
+    private fun appearanceBlock() {
+        add(TextView(this).apply {
+            text = getString(R.string.color_dark_row)
+            textSize = 14f
+            setTextColor(Color.GRAY)
+            setPadding(0, 8, 0, 8)
+        })
+        add(swatchRow(isDark = true))
+        add(TextView(this).apply {
+            text = getString(R.string.color_light_row)
+            textSize = 14f
+            setTextColor(Color.GRAY)
+            setPadding(0, 24, 0, 8)
+        })
+        add(swatchRow(isDark = false))
+        add(TextView(this).apply {
+            text = getString(R.string.settings_note)
+            textSize = 12f
+            setTextColor(Color.GRAY)
+            setPadding(0, 8, 0, 0)
+        })
+    }
+
+    private fun swatchRow(isDark: Boolean): LinearLayout {
+        val prefs = getSharedPreferences(Prefs.NAME, MODE_PRIVATE)
+        val current = if (isDark) Prefs.colorDark(this) else Prefs.colorLight(this)
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        for (c in swatches) {
+            row.addView(View(this).apply {
+                layoutParams = LinearLayout.LayoutParams(96, 96).apply { marginEnd = 16 }
+                setBackgroundColor(if (c == 0) 0xFF8E8E93.toInt() else c)
+                alpha = if (c == current) 1.0f else 0.45f
+                setOnClickListener {
+                    prefs.edit().putInt(
+                        if (isDark) Prefs.KEY_COLOR_DARK else Prefs.KEY_COLOR_LIGHT, c
+                    ).apply()
+                    for (i in 0 until row.childCount) {
+                        row.getChildAt(i).alpha = if (swatches[i] == c) 1.0f else 0.45f
+                    }
+                }
+            })
+        }
+        return row
     }
 
     private fun languageRow() {
@@ -515,12 +596,12 @@ class SettingsActivity : AppCompatActivity() {
                 }
             })
         }
-        root.addView(row)
+        add(row)
     }
 
     private fun keyboardLangs() {
         val prefs = getSharedPreferences(Prefs.NAME, MODE_PRIVATE)
-        root.addView(TextView(this).apply {
+        add(TextView(this).apply {
             text = getString(R.string.keyboard_langs_title)
             textSize = 14f
             setTextColor(Color.GRAY)
@@ -604,7 +685,7 @@ class SettingsActivity : AppCompatActivity() {
             else getString(R.string.bigrams_summary, lines.joinToString(" · "))
         }
         refreshSummary()
-        root.addView(summary)
+        add(summary)
 
         val sw = MaterialSwitch(this).apply {
             text = getString(R.string.switch_bigrams)
@@ -624,9 +705,9 @@ class SettingsActivity : AppCompatActivity() {
                 prefs.edit().putBoolean(Prefs.KEY_BIGRAMS, checked).apply()
             }
         }
-        root.addView(sw)
+        add(sw)
 
-        root.addView(MaterialButton(this).apply {
+        add(MaterialButton(this).apply {
             text = getString(R.string.btn_delete_bigrams)
             setOnClickListener {
                 var n = 0
@@ -639,7 +720,7 @@ class SettingsActivity : AppCompatActivity() {
             }
         })
 
-        root.addView(MaterialButton(this).apply {
+        add(MaterialButton(this).apply {
             text = getString(R.string.btn_view_bigrams)
             setOnClickListener {
                 val km = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
@@ -902,6 +983,7 @@ class DualGridView(context: Context) : View(context) {
     private var caseInitialized = false
     private var caseAnimStart = -1L
     private var caseFromUpper = false
+    private var attachTime = 0L
 
     private var capsuleAnimStart = -1L
     private var capsuleOld = ""
@@ -996,6 +1078,11 @@ class DualGridView(context: Context) : View(context) {
                 resources.displayMetrics.density) / 430f
     }
 
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        attachTime = SystemClock.uptimeMillis()
+    }
+
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val mode = MeasureSpec.getMode(heightMeasureSpec)
         val size = MeasureSpec.getSize(heightMeasureSpec)
@@ -1069,8 +1156,10 @@ class DualGridView(context: Context) : View(context) {
         val stripH = px(48f)
         val sliderZone = px(64f)
         val sliderH = px(32f)
+        val bottomExtra = height * (marginBottomPct / 100f)
+        val zoneTop = height - bottomExtra - sliderZone
         val gridTop = barP * stripH
-        val gridH = height - gridTop - sliderZone
+        val gridH = zoneTop - gridTop
         val contentLeft = width * (marginLeftPct / 100f)
         val contentWidth = width - contentLeft - width * (marginRightPct / 100f)
         val avail = contentWidth - 2 * padH
@@ -1080,9 +1169,9 @@ class DualGridView(context: Context) : View(context) {
         val gapLeft = contentLeft + padH + gridW + gapU
         val gapRight = gapLeft + pillW
         val rowH = (gridH - 2 * padV - 2 * gapU) / 3f
-        val sliderTop = height - sliderZone + (sliderZone - sliderH) / 2f
+        val sliderTop = zoneTop + (sliderZone - sliderH) / 2f
         val capsuleH = (sliderZone - sliderH) / 2f
-        val capsuleTop = height - sliderZone
+        val capsuleTop = zoneTop
         return Geo(stripH, sliderZone, sliderTop, sliderH, gridTop, rowH, colW, gapU,
             padH, padV, gapLeft, gapRight, pillW, contentLeft, contentWidth,
             capsuleTop, capsuleH)
@@ -1386,7 +1475,8 @@ class DualGridView(context: Context) : View(context) {
             lastCapsVisual = capsVisual
         } else if (capsVisual != lastCapsVisual) {
             caseFromUpper = lastCapsVisual
-            caseAnimStart = if (caseDur() > 0L && animStrong) now else -1L
+            val allow = caseDur() > 0L && animStrong && (now - attachTime > 300L)
+            caseAnimStart = if (allow) now else -1L
             lastCapsVisual = capsVisual
             if (caseAnimStart >= 0L) kickAnim()
         }
@@ -1712,6 +1802,12 @@ class DualGridView(context: Context) : View(context) {
                 linePaint.alpha = 255
             }
         }
+
+        // Blindatge anti-fotograma-congelat: si queda alguna animació viva,
+        // el propi onDraw re-programa el següent fotograma. Cap marc a mig
+        // fer pot quedar-se pintat per sempre (adiós "L levitant" i glifs encallats).
+        if (caseAnimStart >= 0L && caseT >= 1f) caseAnimStart = -1L
+        if (anyAnimActive(now)) kickAnim()
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {

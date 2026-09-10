@@ -70,4 +70,7 @@
     <string name="bigrams_warning_confirm">Entendido, activa el registro (%1$d s)</string>
     <string name="bigrams_warning_ok">Entendido, activa el registro</string>
     <string name="bigrams_warning_cancel">Cancelar</string>
+    <string name="color_dark_row">Color principal (modo oscuro)</string>
+    <string name="color_light_row">Color principal (modo claro)</string>
+    <string name="color_default">Por defecto</string>
 </resources>

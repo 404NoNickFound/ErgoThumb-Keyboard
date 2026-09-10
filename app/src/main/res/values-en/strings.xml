@@ -70,4 +70,7 @@
     <string name="bigrams_warning_confirm">Understood, enable the log (%1$d s)</string>
     <string name="bigrams_warning_ok">Understood, enable the log</string>
     <string name="bigrams_warning_cancel">Cancel</string>
+    <string name="color_dark_row">Principal color (dark mode)</string>
+    <string name="color_light_row">Principal color (light mode)</string>
+    <string name="color_default">Default</string>
 </resources>

@@ -70,4 +70,7 @@
     <string name="bigrams_warning_confirm">Entesos, activa el registre (%1$d s)</string>
     <string name="bigrams_warning_ok">Entesos, activa el registre</string>
     <string name="bigrams_warning_cancel">Cancel·la</string>
+    <string name="color_dark_row">Color principal (mode fosc)</string>
+    <string name="color_light_row">Color principal (mode clar)</string>
+    <string name="color_default">Per defecte</string>
 </resources>
