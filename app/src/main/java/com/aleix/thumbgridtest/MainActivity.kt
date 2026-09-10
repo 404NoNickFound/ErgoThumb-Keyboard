@@ -23,14 +23,16 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
-import android.widget.Button
-import android.widget.CheckBox
 import android.widget.LinearLayout
 import android.widget.ScrollView
-import android.widget.SeekBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.appcompat.widget.AppCompatEditText
+import androidx.core.os.LocaleListCompat
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.materialswitch.MaterialSwitch
+import com.google.android.material.slider.Slider
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.hypot
@@ -53,6 +55,7 @@ object Prefs {
     const val KEY_SHOW_HINTS = "show_hints"
     const val KEY_BIGRAMS = "bigrams_enabled"
     const val KEY_ONBOARDED = "onboarded"
+    const val KEY_APP_LANG = "app_lang"
 
     const val KEY_MARGIN_SIDE = "margin_side"
     const val KEY_MARGIN_LEFT = "margin_left"
@@ -94,9 +97,10 @@ object Prefs {
     fun sensErase(ctx: Context) = prefs(ctx).getFloat(KEY_SENS_ERASE, DEFAULT_SENS_ERASE)
     fun flickMs(ctx: Context) = prefs(ctx).getFloat(KEY_FLICK_MS, DEFAULT_FLICK_MS)
     fun showHints(ctx: Context) = prefs(ctx).getBoolean(KEY_SHOW_HINTS, true)
-    fun bigrams(ctx: Context) = prefs(ctx).getBoolean(KEY_BIGRAMS, true)
+    fun bigrams(ctx: Context) = prefs(ctx).getBoolean(KEY_BIGRAMS, false)
     fun onboarded(ctx: Context) = prefs(ctx).getBoolean(KEY_ONBOARDED, false)
     fun setOnboarded(ctx: Context, v: Boolean) = prefs(ctx).edit().putBoolean(KEY_ONBOARDED, v).apply()
+    fun appLang(ctx: Context) = prefs(ctx).getString(KEY_APP_LANG, "ca") ?: "ca"
 
     fun marginSide(ctx: Context) = prefs(ctx).getFloat(KEY_MARGIN_SIDE, DEFAULT_MARGIN_SIDE)
     fun marginIndep(ctx: Context) = prefs(ctx).getBoolean(KEY_MARGIN_INDEP, false)
@@ -217,18 +221,18 @@ class MainActivity : AppCompatActivity() {
             )
             setTextColor(Color.WHITE)
             setHintTextColor(Color.GRAY)
-            hint = "Prova el teclat aquí"
+            hint = getString(R.string.test_hint)
             setBackgroundColor(Color.parseColor("#222222"))
             setPadding(32, 24, 32, 24)
             onSel = { if (::dualGridView.isInitialized) dualGridView.invalidate() }
         }
 
-        val enableButton = Button(this).apply {
-            text = "Obre els ajustos de teclats del sistema"
+        val enableButton = MaterialButton(this).apply {
+            text = getString(R.string.btn_system_settings)
             setOnClickListener { startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS)) }
         }
-        val settingsButton = Button(this).apply {
-            text = "Ajustos del teclat"
+        val settingsButton = MaterialButton(this).apply {
+            text = getString(R.string.btn_app_settings)
             setOnClickListener {
                 startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
             }
@@ -311,13 +315,13 @@ class MainActivity : AppCompatActivity() {
             setPadding(64, 96, 64, 64)
         }
         lay.addView(TextView(this).apply {
-            text = "Tria el teu idioma / Elige tu idioma / Choose your language"
+            text = getString(R.string.chooser_title)
             textSize = 20f
             setTextColor(Color.WHITE)
             setPadding(0, 0, 0, 48)
         })
         for (code in Layouts.CODES) {
-            lay.addView(Button(this).apply {
+            lay.addView(MaterialButton(this).apply {
                 text = Layouts.NATIVE[code] ?: code
                 setOnClickListener { chooseLang(code) }
             })
@@ -330,8 +334,10 @@ class MainActivity : AppCompatActivity() {
         Prefs.setLang(this, code)
         getSharedPreferences(Prefs.NAME, MODE_PRIVATE).edit()
             .putString(Prefs.KEY_LANGS, (listOf(code) + others).joinToString(","))
+            .putString(Prefs.KEY_APP_LANG, code)
             .putBoolean(Prefs.KEY_ONBOARDED, true)
             .apply()
+        AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(code))
         recreate()
     }
 
@@ -344,16 +350,15 @@ class MainActivity : AppCompatActivity() {
 class SettingsActivity : AppCompatActivity() {
 
     private val reqUnlock = 1234
+    private lateinit var root: LinearLayout
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val prefs = getSharedPreferences(Prefs.NAME, MODE_PRIVATE)
-
         val scroll = ScrollView(this).apply {
             setBackgroundColor(Color.parseColor("#111111"))
         }
-        val root = LinearLayout(this).apply {
+        root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(48, 48, 48, 48)
         }
@@ -363,258 +368,321 @@ class SettingsActivity : AppCompatActivity() {
         ))
 
         root.addView(TextView(this).apply {
-            text = "Ajustos del teclat"
-            textSize = 22f
+            text = getString(R.string.settings_title)
+            textSize = 24f
             setTextColor(Color.WHITE)
+            setPadding(0, 0, 0, 24)
         })
 
-        fun slider(
-            label: String, min: Int, max: Int, current: Int,
-            format: (Int) -> String, onValue: (Int) -> Unit
-        ): SeekBar {
-            val text = TextView(this).apply {
-                textSize = 17f
-                setTextColor(Color.WHITE)
-                setPadding(0, 32, 0, 8)
-            }
-            val bar = SeekBar(this).apply {
-                this.max = max - min
-                progress = (current - min).coerceIn(0, max - min)
-                text.text = "$label: ${format(min + progress)}"
-                setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                    override fun onProgressChanged(b: SeekBar?, p: Int, user: Boolean) {
-                        if (!user) return
-                        val v = min + p
-                        text.text = "$label: ${format(v)}"
-                        onValue(v)
-                    }
-                    override fun onStartTrackingTouch(b: SeekBar?) {}
-                    override fun onStopTrackingTouch(b: SeekBar?) {}
-                })
-            }
-            root.addView(text)
-            root.addView(bar)
-            return bar
-        }
+        section(R.string.section_languages)
+        languageRow()
+        keyboardLangs()
 
-        slider("Alçada del teclat", 25, 60, (Prefs.height(this) * 100).toInt(),
-            { "$it% de la pantalla" })
-        { v -> prefs.edit().putFloat(Prefs.KEY_HEIGHT, v / 100f).apply() }
-        slider("Separació entre graelles", 0, 15, (Prefs.gap(this) * 100).toInt(),
-            { "$it% de l'amplada" })
-        { v -> prefs.edit().putFloat(Prefs.KEY_GAP, v / 100f).apply() }
+        section(R.string.section_geometry)
+        mSlider(R.string.slider_height, 25f, 60f, Prefs.height(this) * 100f,
+            { getString(R.string.fmt_percent_screen, it.toInt()) })
+        { v -> putF(Prefs.KEY_HEIGHT, v / 100f) }
+        mSlider(R.string.slider_gap, 0f, 15f, Prefs.gap(this) * 100f,
+            { getString(R.string.fmt_percent_width, it.toInt()) })
+        { v -> putF(Prefs.KEY_GAP, v / 100f) }
+        marginsBlock()
+        mSlider(R.string.slider_margin_bottom, 8f, 25f, Prefs.marginBottom(this),
+            { getString(R.string.fmt_percent_height, it.toInt()) })
+        { v -> putF(Prefs.KEY_MARGIN_BOTTOM, v) }
 
-        val indepBox = CheckBox(this).apply {
-            text = "Marges laterals independents"
+        section(R.string.section_sensitivity)
+        mSlider(R.string.slider_threshold, 12f, 48f, Prefs.threshold(this),
+            { getString(R.string.fmt_dp, it.toInt()) })
+        { v -> putF(Prefs.KEY_THRESHOLD, v) }
+        mSlider(R.string.slider_double, 150f, 700f, Prefs.doubleMs(this),
+            { getString(R.string.fmt_ms, it.toInt()) })
+        { v -> putF(Prefs.KEY_DOUBLE_MS, v) }
+        mSlider(R.string.slider_sens_chars, 5f, 60f, Prefs.sensChars(this),
+            { getString(R.string.fmt_chars_swipe, it.toInt()) })
+        { v -> putF(Prefs.KEY_SENS_CHARS, v) }
+        mSlider(R.string.slider_vmax, 5f, 40f, Prefs.vmax(this),
+            { getString(R.string.fmt_cps, it.toInt()) })
+        { v -> putF(Prefs.KEY_VMAX, v) }
+        mSlider(R.string.slider_sens_erase, 2f, 30f, Prefs.sensErase(this),
+            { getString(R.string.fmt_chars_swipe, it.toInt()) })
+        { v -> putF(Prefs.KEY_SENS_ERASE, v) }
+        mSlider(R.string.slider_flick, 80f, 400f, Prefs.flickMs(this),
+            { getString(R.string.fmt_ms, it.toInt()) })
+        { v -> putF(Prefs.KEY_FLICK_MS, v) }
+
+        section(R.string.section_comfort)
+        mSwitch(R.string.switch_autocap, Prefs.autoCap(this)) { putB(Prefs.KEY_AUTOCAP, it) }
+        mSwitch(R.string.switch_autospace, Prefs.autoSpace(this)) { putB(Prefs.KEY_AUTOSPACE, it) }
+        mSwitch(R.string.switch_cursor_word, Prefs.cursorWord(this)) { putB(Prefs.KEY_CURSOR_WORD, it) }
+        mSwitch(R.string.switch_hints, Prefs.showHints(this)) { putB(Prefs.KEY_SHOW_HINTS, it) }
+
+        section(R.string.section_animations)
+        mSlider(R.string.slider_anim_scale, 50f, 200f, Prefs.animScale(this),
+            { getString(R.string.fmt_percent, it.toInt()) })
+        { v -> putF(Prefs.KEY_ANIM_SCALE, v) }
+        mSlider(R.string.slider_case_ms, 0f, 500f, Prefs.caseMs(this),
+            { if (it.toInt() < 150) getString(R.string.case_instant)
+            else getString(R.string.fmt_ms, it.toInt()) })
+        { v -> putF(Prefs.KEY_CASE_MS, v) }
+        mSwitch(R.string.switch_anim_strong, Prefs.animStrong(this)) { putB(Prefs.KEY_ANIM_STRONG, it) }
+        mSwitch(R.string.switch_anim_depth, Prefs.animDepth(this)) { putB(Prefs.KEY_ANIM_DEPTH, it) }
+        mSwitch(R.string.switch_anim_help, Prefs.animHelp(this)) { putB(Prefs.KEY_ANIM_HELP, it) }
+        mSwitch(R.string.switch_anim_trace, Prefs.animTrace(this)) { putB(Prefs.KEY_ANIM_TRACE, it) }
+
+        section(R.string.section_advanced)
+        bigramsBlock()
+
+        root.addView(TextView(this).apply {
+            text = getString(R.string.settings_note)
+            textSize = 13f
+            setTextColor(Color.GRAY)
+            setPadding(0, 40, 0, 0)
+        })
+
+        setContentView(scroll)
+    }
+
+    private fun putF(key: String, v: Float) =
+        getSharedPreferences(Prefs.NAME, MODE_PRIVATE).edit().putFloat(key, v).apply()
+
+    private fun putB(key: String, v: Boolean) =
+        getSharedPreferences(Prefs.NAME, MODE_PRIVATE).edit().putBoolean(key, v).apply()
+
+    private fun section(titleRes: Int) {
+        root.addView(TextView(this).apply {
+            text = getString(titleRes)
+            textSize = 15f
+            setTextColor(Color.parseColor("#8E8E93"))
+            setPadding(0, 40, 0, 12)
+        })
+    }
+
+    private fun mSwitch(labelRes: Int, current: Boolean, onValue: (Boolean) -> Unit): MaterialSwitch {
+        val sw = MaterialSwitch(this).apply {
+            text = getString(labelRes)
+            textSize = 16f
             setTextColor(Color.WHITE)
-            isChecked = Prefs.marginIndep(this@SettingsActivity)
+            isChecked = current
+            setPadding(0, 16, 0, 16)
+            setOnCheckedChangeListener { _, c -> onValue(c) }
         }
-        root.addView(indepBox)
+        root.addView(sw)
+        return sw
+    }
 
-        val symBar = slider("Marge lateral (simètric)", 0, 12, Prefs.marginSide(this).toInt(),
-            { "$it% de l'amplada" })
-        { v -> prefs.edit().putFloat(Prefs.KEY_MARGIN_SIDE, v.toFloat()).apply() }
-        val leftBar = slider("Marge esquerre", 0, 12, Prefs.marginLeft(this).toInt(),
-            { "$it% de l'amplada" })
-        { v -> prefs.edit().putFloat(Prefs.KEY_MARGIN_LEFT, v.toFloat()).apply() }
-        val rightBar = slider("Marge dret", 0, 12, Prefs.marginRight(this).toInt(),
-            { "$it% de l'amplada" })
-        { v -> prefs.edit().putFloat(Prefs.KEY_MARGIN_RIGHT, v.toFloat()).apply() }
-
-        fun refreshMarginBars() {
-            val indep = indepBox.isChecked
-            symBar.isEnabled = !indep
-            leftBar.isEnabled = indep
-            rightBar.isEnabled = indep
+    private fun mSlider(
+        labelRes: Int, from: Float, to: Float, current: Float,
+        format: (Float) -> String, onValue: (Float) -> Unit
+    ): Slider {
+        val tv = TextView(this).apply {
+            textSize = 16f
+            setTextColor(Color.WHITE)
+            setPadding(0, 20, 0, 4)
+            text = getString(labelRes) + ": " + format(current)
         }
-        indepBox.setOnCheckedChangeListener { _, checked ->
+        val sl = Slider(this).apply {
+            valueFrom = from
+            valueTo = to
+            stepSize = 1f
+            value = current.coerceIn(from, to)
+            addOnChangeListener { _, value, _ ->
+                tv.text = getString(labelRes) + ": " + format(value)
+                onValue(value)
+            }
+        }
+        root.addView(tv)
+        root.addView(sl)
+        return sl
+    }
+
+    private fun languageRow() {
+        val prefs = getSharedPreferences(Prefs.NAME, MODE_PRIVATE)
+        val current = Prefs.appLang(this)
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val codes = listOf(
+            "ca" to R.string.lang_ca,
+            "es" to R.string.lang_es,
+            "en" to R.string.lang_en
+        )
+        for ((code, nameRes) in codes) {
+            row.addView(MaterialButton(this).apply {
+                text = getString(nameRes)
+                alpha = if (code == current) 1.0f else 0.55f
+                setOnClickListener {
+                    prefs.edit().putString(Prefs.KEY_APP_LANG, code).apply()
+                    AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(code))
+                    recreate()
+                }
+            })
+        }
+        root.addView(row)
+    }
+
+    private fun keyboardLangs() {
+        val prefs = getSharedPreferences(Prefs.NAME, MODE_PRIVATE)
+        root.addView(TextView(this).apply {
+            text = getString(R.string.keyboard_langs_title)
+            textSize = 14f
+            setTextColor(Color.GRAY)
+            setPadding(0, 24, 0, 8)
+        })
+        val enabledLangs = Prefs.langs(this).toMutableList()
+        for (code in Layouts.CODES) {
+            val labelRes = when (code) {
+                "ca" -> R.string.lang_ca
+                "es" -> R.string.lang_es
+                else -> R.string.lang_en
+            }
+            val sw = mSwitch(labelRes, code in enabledLangs) { }
+            sw.setOnCheckedChangeListener { _, checked ->
+                if (checked) {
+                    if (code !in enabledLangs) enabledLangs.add(code)
+                } else {
+                    if (enabledLangs.size == 1) {
+                        sw.isChecked = true
+                        return@setOnCheckedChangeListener
+                    }
+                    enabledLangs.remove(code)
+                }
+                prefs.edit().putString(
+                    Prefs.KEY_LANGS,
+                    Layouts.CODES.filter { it in enabledLangs }.joinToString(",")
+                ).apply()
+            }
+        }
+    }
+
+    private fun marginsBlock() {
+        val prefs = getSharedPreferences(Prefs.NAME, MODE_PRIVATE)
+        val indep = mSwitch(R.string.switch_indep_margins, Prefs.marginIndep(this)) { }
+        val sym = mSlider(R.string.slider_margin_side, 0f, 12f, Prefs.marginSide(this),
+            { getString(R.string.fmt_percent_width, it.toInt()) })
+        { v -> putF(Prefs.KEY_MARGIN_SIDE, v) }
+        val left = mSlider(R.string.slider_margin_left, 0f, 12f, Prefs.marginLeft(this),
+            { getString(R.string.fmt_percent_width, it.toInt()) })
+        { v -> putF(Prefs.KEY_MARGIN_LEFT, v) }
+        val right = mSlider(R.string.slider_margin_right, 0f, 12f, Prefs.marginRight(this),
+            { getString(R.string.fmt_percent_width, it.toInt()) })
+        { v -> putF(Prefs.KEY_MARGIN_RIGHT, v) }
+        fun refresh() {
+            val i = indep.isChecked
+            sym.isEnabled = !i
+            left.isEnabled = i
+            right.isEnabled = i
+        }
+        indep.setOnCheckedChangeListener { _, checked ->
             if (checked) {
-                val sym = Prefs.marginSide(this)
-                prefs.edit()
-                    .putFloat(Prefs.KEY_MARGIN_LEFT, sym)
-                    .putFloat(Prefs.KEY_MARGIN_RIGHT, sym)
-                    .putBoolean(Prefs.KEY_MARGIN_INDEP, true)
-                    .apply()
-                leftBar.progress = sym.toInt()
-                rightBar.progress = sym.toInt()
+                val s = Prefs.marginSide(this)
+                prefs.edit().putFloat(Prefs.KEY_MARGIN_LEFT, s)
+                    .putFloat(Prefs.KEY_MARGIN_RIGHT, s)
+                    .putBoolean(Prefs.KEY_MARGIN_INDEP, true).apply()
+                left.value = s.coerceIn(left.valueFrom, left.valueTo)
+                right.value = s.coerceIn(right.valueFrom, right.valueTo)
             } else {
                 prefs.edit().putBoolean(Prefs.KEY_MARGIN_INDEP, false).apply()
             }
-            refreshMarginBars()
+            refresh()
         }
-        refreshMarginBars()
+        refresh()
+    }
 
-        slider("Marge inferior (barra)", 8, 25, Prefs.marginBottom(this).toInt(),
-            { "$it% de l'alçada" })
-        { v -> prefs.edit().putFloat(Prefs.KEY_MARGIN_BOTTOM, v.toFloat()).apply() }
-        slider("Llindar de gest", 12, 48, Prefs.threshold(this).toInt(),
-            { "$it dp" })
-        { v -> prefs.edit().putFloat(Prefs.KEY_THRESHOLD, v.toFloat()).apply() }
-        slider("Temps de doble acció", 150, 700, Prefs.doubleMs(this).toInt(),
-            { "$it ms" })
-        { v -> prefs.edit().putFloat(Prefs.KEY_DOUBLE_MS, v.toFloat()).apply() }
-        slider("Sensibilitat del cursor (mapa directe)", 5, 60, Prefs.sensChars(this).toInt(),
-            { "$it caràcters per lliscada" })
-        { v -> prefs.edit().putFloat(Prefs.KEY_SENS_CHARS, v.toFloat()).apply() }
-        slider("Velocitat màxima del desplaçament continu", 5, 40, Prefs.vmax(this).toInt(),
-            { "$it caràcters/s" })
-        { v -> prefs.edit().putFloat(Prefs.KEY_VMAX, v.toFloat()).apply() }
-        slider("Sensibilitat d'esborrat", 2, 30, Prefs.sensErase(this).toInt(),
-            { "$it caràcters per lliscada" })
-        { v -> prefs.edit().putFloat(Prefs.KEY_SENS_ERASE, v.toFloat()).apply() }
-        slider("Finestra de flick", 80, 400, Prefs.flickMs(this).toInt(),
-            { "$it ms" })
-        { v -> prefs.edit().putFloat(Prefs.KEY_FLICK_MS, v.toFloat()).apply() }
-        slider("Temps d'animacions", 50, 200, Prefs.animScale(this).toInt(),
-            { "$it%" })
-        { v -> prefs.edit().putFloat(Prefs.KEY_ANIM_SCALE, v.toFloat()).apply() }
-        slider("Durada de l'empenyiment de caixa", 0, 500, Prefs.caseMs(this).toInt(),
-            { if (it < 150) "instantani (<150 ms)" else "$it ms" })
-        { v -> prefs.edit().putFloat(Prefs.KEY_CASE_MS, v.toFloat()).apply() }
+    private fun bigramsBlock() {
+        val prefs = getSharedPreferences(Prefs.NAME, MODE_PRIVATE)
 
-        root.addView(CheckBox(this).apply {
-            text = "Majúscula automàtica"
-            setTextColor(Color.WHITE)
-            isChecked = Prefs.autoCap(this@SettingsActivity)
-            setOnCheckedChangeListener { _, c ->
-                prefs.edit().putBoolean(Prefs.KEY_AUTOCAP, c).apply()
-            }
-        })
-        root.addView(CheckBox(this).apply {
-            text = "Espai automàtic després de signe"
-            setTextColor(Color.WHITE)
-            isChecked = Prefs.autoSpace(this@SettingsActivity)
-            setOnCheckedChangeListener { _, c ->
-                prefs.edit().putBoolean(Prefs.KEY_AUTOSPACE, c).apply()
-            }
-        })
-        root.addView(CheckBox(this).apply {
-            text = "Moure el cursor de paraula en paraula"
-            setTextColor(Color.WHITE)
-            isChecked = Prefs.cursorWord(this@SettingsActivity)
-            setOnCheckedChangeListener { _, c ->
-                prefs.edit().putBoolean(Prefs.KEY_CURSOR_WORD, c).apply()
-            }
-        })
-        root.addView(CheckBox(this).apply {
-            text = "Mostra pistes de gestos a les tecles"
-            setTextColor(Color.WHITE)
-            isChecked = Prefs.showHints(this@SettingsActivity)
-            setOnCheckedChangeListener { _, c ->
-                prefs.edit().putBoolean(Prefs.KEY_SHOW_HINTS, c).apply()
-            }
-        })
-        root.addView(CheckBox(this).apply {
-            text = "Animacions fortes (transicions i lliscats)"
-            setTextColor(Color.WHITE)
-            isChecked = Prefs.animStrong(this@SettingsActivity)
-            setOnCheckedChangeListener { _, c ->
-                prefs.edit().putBoolean(Prefs.KEY_ANIM_STRONG, c).apply()
-            }
-        })
-        root.addView(CheckBox(this).apply {
-            text = "Efectes de profunditat (blob, ombres, enfosquiment, spring)"
-            setTextColor(Color.WHITE)
-            isChecked = Prefs.animDepth(this@SettingsActivity)
-            setOnCheckedChangeListener { _, c ->
-                prefs.edit().putBoolean(Prefs.KEY_ANIM_DEPTH, c).apply()
-            }
-        })
-        root.addView(CheckBox(this).apply {
-            text = "Ajuda visual (flash i substitució de caràcter)"
-            setTextColor(Color.WHITE)
-            isChecked = Prefs.animHelp(this@SettingsActivity)
-            setOnCheckedChangeListener { _, c ->
-                prefs.edit().putBoolean(Prefs.KEY_ANIM_HELP, c).apply()
-            }
-        })
-        root.addView(CheckBox(this).apply {
-            text = "Mostra la traça del gest (línia guia)"
-            setTextColor(Color.WHITE)
-            isChecked = Prefs.animTrace(this@SettingsActivity)
-            setOnCheckedChangeListener { _, c ->
-                prefs.edit().putBoolean(Prefs.KEY_ANIM_TRACE, c).apply()
-            }
-        })
-        root.addView(CheckBox(this).apply {
-            text = "Registra bigrams per optimitzar el layout"
-            setTextColor(Color.WHITE)
-            isChecked = Prefs.bigrams(this@SettingsActivity)
-            setOnCheckedChangeListener { _, c ->
-                prefs.edit().putBoolean(Prefs.KEY_BIGRAMS, c).apply()
-            }
-        })
-
-        root.addView(TextView(this).apply {
+        val summary = TextView(this).apply {
+            textSize = 13f
+            setTextColor(Color.GRAY)
+            setPadding(0, 8, 0, 8)
+        }
+        fun refreshSummary() {
             val lines = Layouts.CODES.mapNotNull { code ->
                 val f = java.io.File(filesDir, "bigrams_$code.txt")
                 val n = if (f.exists()) f.readLines().size else 0
-                if (n > 0) "${code.uppercase()}: $n parells" else null
+                if (n > 0) "${code.uppercase()}: $n" else null
             }
-            text = if (lines.isEmpty()) "Registre de bigrams: buit"
-            else "Registre de bigrams: " + lines.joinToString(" · ")
-            textSize = 14f
-            setTextColor(Color.GRAY)
-            setPadding(0, 24, 0, 0)
-        })
+            summary.text = if (lines.isEmpty()) getString(R.string.bigrams_empty)
+            else getString(R.string.bigrams_summary, lines.joinToString(" · "))
+        }
+        refreshSummary()
+        root.addView(summary)
 
-        root.addView(Button(this).apply {
-            text = "Esborra el registre de bigrams"
+        val sw = MaterialSwitch(this).apply {
+            text = getString(R.string.switch_bigrams)
+            textSize = 16f
+            setTextColor(Color.WHITE)
+            isChecked = Prefs.bigrams(this@SettingsActivity)
+            setPadding(0, 16, 0, 16)
+        }
+        sw.setOnCheckedChangeListener { _, checked ->
+            if (checked && !prefs.getBoolean(Prefs.KEY_BIGRAMS, false)) {
+                sw.isChecked = false
+                showBigramsWarning {
+                    prefs.edit().putBoolean(Prefs.KEY_BIGRAMS, true).apply()
+                    sw.isChecked = true
+                }
+            } else {
+                prefs.edit().putBoolean(Prefs.KEY_BIGRAMS, checked).apply()
+            }
+        }
+        root.addView(sw)
+
+        root.addView(MaterialButton(this).apply {
+            text = getString(R.string.btn_delete_bigrams)
             setOnClickListener {
                 var n = 0
                 for (code in Layouts.CODES) {
                     val f = java.io.File(filesDir, "bigrams_$code.txt")
                     if (f.exists()) { f.delete(); n++ }
                 }
-                text = if (n > 0) "Registre esborrat ($n fitxers)" else "No hi havia registre"
+                text = if (n > 0) getString(R.string.deleted_n, n) else getString(R.string.no_register)
+                refreshSummary()
             }
         })
 
-        root.addView(Button(this).apply {
-            text = "Veure el registre (requereix desbloqueig)"
+        root.addView(MaterialButton(this).apply {
+            text = getString(R.string.btn_view_bigrams)
             setOnClickListener {
                 val km = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
                 val intent = km.createConfirmDeviceCredentialIntent(
-                    "Desbloqueig necessari",
-                    "Introdueix el patró, PIN o contrasenya per veure el registre de bigrams"
+                    getString(R.string.unlock_title),
+                    getString(R.string.unlock_desc)
                 )
                 if (intent != null) startActivityForResult(intent, reqUnlock)
                 else showRegister()
             }
         })
+    }
 
-        root.addView(TextView(this).apply {
-            text = "Idiomes del cicle (tap a la càpsula del teclat)"
-            textSize = 17f
-            setTextColor(Color.WHITE)
-            setPadding(0, 32, 0, 8)
-        })
-        val enabledLangs = Prefs.langs(this).toMutableList()
-        for (code in Layouts.CODES) {
-            root.addView(CheckBox(this).apply {
-                text = Layouts.NAMES[code] ?: code
-                setTextColor(Color.WHITE)
-                isChecked = code in enabledLangs
-                setOnCheckedChangeListener { _, checked ->
-                    if (checked) { if (code !in enabledLangs) enabledLangs.add(code) }
-                    else { enabledLangs.remove(code) }
-                    if (enabledLangs.isEmpty()) { isChecked = true; enabledLangs.add(code) }
-                    prefs.edit().putString(
-                        Prefs.KEY_LANGS,
-                        Layouts.CODES.filter { it in enabledLangs }.joinToString(",")
-                    ).apply()
+    private fun showBigramsWarning(onAccept: () -> Unit) {
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(getString(R.string.bigrams_warning_title))
+            .setMessage(getString(R.string.bigrams_warning_body))
+            .setCancelable(false)
+            .setNegativeButton(getString(R.string.bigrams_warning_cancel), null)
+            .setPositiveButton(getString(R.string.bigrams_warning_confirm, 5), null)
+            .create()
+        dialog.show()
+        val button = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+        button.isEnabled = false
+        var remaining = 5
+        val handler = Handler(Looper.getMainLooper())
+        val tick = object : Runnable {
+            override fun run() {
+                remaining -= 1
+                if (remaining > 0) {
+                    button.text = getString(R.string.bigrams_warning_confirm, remaining)
+                    handler.postDelayed(this, 1000L)
+                } else {
+                    button.text = getString(R.string.bigrams_warning_ok)
+                    button.isEnabled = true
+                    button.setOnClickListener {
+                        dialog.dismiss()
+                        onAccept()
+                    }
                 }
-            })
+            }
         }
-
-        root.addView(TextView(this).apply {
-            text = "Els canvis s'apliquen la propera vegada que es mostra el teclat."
-            textSize = 14f
-            setTextColor(Color.GRAY)
-            setPadding(0, 32, 0, 0)
-        })
-
-        setContentView(scroll)
+        handler.postDelayed(tick, 1000L)
     }
 
     @Deprecated("API antiga però suficient per al prototip.")
@@ -636,7 +704,7 @@ class SettingsActivity : AppCompatActivity() {
         val view = ScrollView(this).apply {
             setBackgroundColor(Color.parseColor("#222222"))
             addView(TextView(this@SettingsActivity).apply {
-                text = if (sb.isEmpty()) "Registre buit" else sb.toString()
+                text = if (sb.isEmpty()) getString(R.string.register_empty) else sb.toString()
                 textSize = 12f
                 setTextColor(Color.WHITE)
                 setPadding(32, 32, 32, 32)
@@ -644,9 +712,9 @@ class SettingsActivity : AppCompatActivity() {
             })
         }
         AlertDialog.Builder(this)
-            .setTitle("Registre de bigrams")
+            .setTitle(getString(R.string.register_title))
             .setView(view)
-            .setPositiveButton("Tanca", null)
+            .setPositiveButton(getString(R.string.close), null)
             .show()
     }
 }
@@ -843,7 +911,6 @@ class DualGridView(context: Context) : View(context) {
     private var knobSpringFrom = 0f
     private var tickOffset = 0f
 
-    // Flash del pill derivat dels pointers vius: impossible que quedi penjat
     private var pillWasDown = false
     private var pillReleasedAt = -1L
 
@@ -1512,7 +1579,6 @@ class DualGridView(context: Context) : View(context) {
             }
         }
 
-        // ----- pill: flash derivat dels pointers vius (mai no pot quedar penjat) -----
         val pillDownNow = activePointers.values.any { it.zone == Zone.SPACE }
         if (!pillDownNow && pillWasDown) pillReleasedAt = now
         pillWasDown = pillDownNow
