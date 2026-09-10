@@ -73,4 +73,6 @@
     <string name="color_dark_row">Color principal (mode fosc)</string>
     <string name="color_light_row">Color principal (mode clar)</string>
     <string name="color_default">Per defecte</string>
+    <string name="color_save">Desa</string>
+    <string name="color_custom">Color personalitzat…</string>
 </resources>

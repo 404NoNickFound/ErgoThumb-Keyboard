@@ -36,6 +36,8 @@ import com.google.android.material.slider.Slider
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.hypot
+import android.content.res.ColorStateList
+
 
 object Prefs {
     const val NAME = "thumbgrid_prefs"
@@ -165,6 +167,8 @@ object Themes {
         val flashPole: Int get() = if (isDark) Color.WHITE else Color.BLACK
         val shadowColor: Int get() = if (isDark) Color.BLACK else 0xFF1C1C1E.toInt()
         fun withPrincipal(c: Int) = Theme(c, pole, text, hint, mixes, keycapShadow)
+        fun appBg(): Int = blendColor(principal, pole, 0.92f)
+        fun buttonBg(): Int = blendColor(principal, pole, 0.35f)
     }
 
     val DARK = Theme(
@@ -186,7 +190,17 @@ object Themes {
                 Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
         val base = if (night) DARK else LIGHT
         val override = if (night) Prefs.colorDark(ctx) else Prefs.colorLight(ctx)
-        return if (override == 0) base else base.withPrincipal(override)
+        val raw = if (override == 0) base.principal else override
+        val dist = colorDist(raw, base.pole)
+        val eff = if (dist < 0.30f)
+            blendColor(raw, if (night) Color.WHITE else Color.BLACK, 0.55f) else raw
+        return if (eff == base.principal) base else base.withPrincipal(eff)
+    }
+
+    private fun colorDist(a: Int, b: Int): Float {
+        val ar = ((a shr 16) and 0xFF) / 255f; val ag = ((a shr 8) and 0xFF) / 255f; val ab = (a and 0xFF) / 255f
+        val br = ((b shr 16) and 0xFF) / 255f; val bg = ((b shr 8) and 0xFF) / 255f; val bb = (b and 0xFF) / 255f
+        return (abs(ar - br) + abs(ag - bg) + abs(ab - bb)) / 3f
     }
 }
 
@@ -215,6 +229,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(Prefs.appLang(this)))
 
         if (!Prefs.onboarded(this)) {
             setContentView(buildChooser())
@@ -302,9 +317,14 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        val th = Themes.current(this)
+        val bgColor = th.appBg()
+        window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(bgColor))
+        window.statusBarColor = bgColor
+        window.navigationBarColor = bgColor
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#111111"))
+            setBackgroundColor(bgColor)
             addView(editText)
             addView(enableButton)
             addView(settingsButton)
@@ -312,13 +332,18 @@ class MainActivity : AppCompatActivity() {
             addView(dualGridView)
         }
 
+        enableButton.backgroundTintList = ColorStateList.valueOf(th.buttonBg())
+        settingsButton.backgroundTintList = ColorStateList.valueOf(th.buttonBg())
+        enableButton.setTextColor(th.text)
+        settingsButton.setTextColor(th.text)
+        editText.setBackgroundColor(blendColor(bgColor, th.text, 0.10f))
         setContentView(root)
     }
 
     private fun buildChooser(): View {
         val lay = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#111111"))
+            setBackgroundColor(Themes.current(this@MainActivity).appBg())
             setPadding(64, 96, 64, 64)
         }
         lay.addView(TextView(this).apply {
@@ -359,6 +384,8 @@ class SettingsActivity : AppCompatActivity() {
     private val reqUnlock = 1234
     private lateinit var root: LinearLayout
     private lateinit var currentContainer: LinearLayout
+    private var accent = 0
+    private var poleCol = Color.BLACK
 
     private val swatches = listOf(
         0,
@@ -371,10 +398,10 @@ class SettingsActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(Prefs.appLang(this)))
 
-        val scroll = ScrollView(this).apply {
-            setBackgroundColor(Color.parseColor("#111111"))
-        }
+        val scroll = ScrollView(this).apply { }
+
         root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(48, 48, 48, 48)
@@ -383,6 +410,15 @@ class SettingsActivity : AppCompatActivity() {
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
         ))
+        val th = Themes.current(this)
+        accent = th.principal
+        poleCol = th.pole
+        val bgColor = th.appBg()
+        window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(bgColor))
+        window.statusBarColor = bgColor
+        window.navigationBarColor = bgColor
+        scroll.setBackgroundColor(bgColor)
+        root.setBackgroundColor(bgColor)
 
         root.addView(TextView(this).apply {
             text = getString(R.string.settings_title)
@@ -459,6 +495,14 @@ class SettingsActivity : AppCompatActivity() {
             setPadding(0, 40, 0, 0)
         })
 
+        fun tintAll(v: View) {
+            if (v is MaterialButton) {
+                v.backgroundTintList = ColorStateList.valueOf(th.buttonBg())
+                v.setTextColor(th.text)
+            }
+            if (v is LinearLayout) for (i in 0 until v.childCount) tintAll(v.getChildAt(i))
+        }
+        tintAll(root)
         setContentView(scroll)
     }
 
@@ -500,6 +544,8 @@ class SettingsActivity : AppCompatActivity() {
             setTextColor(Color.WHITE)
             isChecked = current
             setPadding(0, 16, 0, 16)
+            thumbTintList = ColorStateList.valueOf(accent)
+            trackTintList = ColorStateList.valueOf(blendColor(accent, poleCol, 0.55f))
             setOnCheckedChangeListener { _, c -> onValue(c) }
         }
         add(sw)
@@ -521,6 +567,9 @@ class SettingsActivity : AppCompatActivity() {
             valueTo = to
             stepSize = 1f
             value = current.coerceIn(from, to)
+            setTrackActiveTintList(ColorStateList.valueOf(accent))
+            setTrackInactiveTintList(ColorStateList.valueOf(blendColor(accent, poleCol, 0.6f)))
+            thumbTintList = ColorStateList.valueOf(accent)
             addOnChangeListener { _, value, _ ->
                 tv.text = getString(labelRes) + ": " + format(value)
                 onValue(value)
@@ -532,26 +581,35 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun appearanceBlock() {
-        add(TextView(this).apply {
-            text = getString(R.string.color_dark_row)
-            textSize = 14f
-            setTextColor(Color.GRAY)
-            setPadding(0, 8, 0, 8)
-        })
+        add(label(R.string.color_dark_row))
         add(swatchRow(isDark = true))
-        add(TextView(this).apply {
-            text = getString(R.string.color_light_row)
-            textSize = 14f
-            setTextColor(Color.GRAY)
-            setPadding(0, 24, 0, 8)
-        })
+        add(customColorButton(isDark = true))
+        add(label(R.string.color_light_row))
         add(swatchRow(isDark = false))
-        add(TextView(this).apply {
-            text = getString(R.string.settings_note)
-            textSize = 12f
-            setTextColor(Color.GRAY)
-            setPadding(0, 8, 0, 0)
-        })
+        add(customColorButton(isDark = false))
+    }
+
+    private fun label(res: Int): TextView = TextView(this).apply {
+        text = getString(res)
+        textSize = 14f
+        setTextColor(Color.GRAY)
+        setPadding(0, 16, 0, 8)
+    }
+
+    private fun customColorButton(isDark: Boolean): MaterialButton {
+        return MaterialButton(this).apply {
+            text = getString(R.string.color_custom)
+            setOnClickListener {
+                val current = if (isDark) Prefs.colorDark(this@SettingsActivity)
+                else Prefs.colorLight(this@SettingsActivity)
+                ColorPickerDialog(this@SettingsActivity, isDark, current) { color ->
+                    getSharedPreferences(Prefs.NAME, MODE_PRIVATE).edit()
+                        .putInt(if (isDark) Prefs.KEY_COLOR_DARK else Prefs.KEY_COLOR_LIGHT, color)
+                        .apply()
+                    recreate()
+                }.show()
+            }
+        }
     }
 
     private fun swatchRow(isDark: Boolean): LinearLayout {
@@ -1470,14 +1528,15 @@ class DualGridView(context: Context) : View(context) {
             if (!animDepth) { knobSpringStart = -1L; knobP = 0f }
         }
 
+        val shiftCaps = shiftMode != ShiftMode.OFF
         if (!caseInitialized) {
             caseInitialized = true
-            lastCapsVisual = capsVisual
-        } else if (capsVisual != lastCapsVisual) {
+            lastCapsVisual = shiftCaps
+        } else if (shiftCaps != lastCapsVisual) {
             caseFromUpper = lastCapsVisual
             val allow = caseDur() > 0L && animStrong && (now - attachTime > 300L)
             caseAnimStart = if (allow) now else -1L
-            lastCapsVisual = capsVisual
+            lastCapsVisual = shiftCaps
             if (caseAnimStart >= 0L) kickAnim()
         }
         val caseT = if (caseAnimStart >= 0L) cubicOut(t01(caseAnimStart, caseDur(), now)) else 1f
@@ -1603,7 +1662,7 @@ class DualGridView(context: Context) : View(context) {
                                 yOut = -gap - u * (H - gap)
                             }
                         }
-                        val inCh = if (capsVisual) upper else lower
+                        val inCh = if (shiftCaps) upper else lower
                         val outCh = if (caseFromUpper) upper else lower
                         letterPaint.typeface = if (capsVisual) fontSemiBold else fontMedium
                         canvas.drawText(inCh, r.centerX(), midY + yIn, letterPaint)

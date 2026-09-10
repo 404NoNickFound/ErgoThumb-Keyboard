@@ -73,4 +73,6 @@
     <string name="color_dark_row">Principal color (dark mode)</string>
     <string name="color_light_row">Principal color (light mode)</string>
     <string name="color_default">Default</string>
+    <string name="color_save">Save</string>
+    <string name="color_custom">Custom color…</string>
 </resources>
