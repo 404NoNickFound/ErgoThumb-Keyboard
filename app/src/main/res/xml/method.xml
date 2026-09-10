@@ -5,13 +5,16 @@
     <subtype
         android:label="@string/subtype_ca"
         android:imeSubtypeLocale="ca"
-        android:imeSubtypeMode="keyboard" />
+        android:imeSubtypeMode="keyboard"
+        android:subtypeId="1" />
     <subtype
         android:label="@string/subtype_es"
         android:imeSubtypeLocale="es"
-        android:imeSubtypeMode="keyboard" />
+        android:imeSubtypeMode="keyboard"
+        android:subtypeId="2" />
     <subtype
         android:label="@string/subtype_en"
         android:imeSubtypeLocale="en"
-        android:imeSubtypeMode="keyboard" />
+        android:imeSubtypeMode="keyboard"
+        android:subtypeId="3" />
 </input-method>

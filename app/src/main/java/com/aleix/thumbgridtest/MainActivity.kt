@@ -881,19 +881,19 @@ class ThumbImeService : InputMethodService() {
             val lang = Prefs.lang(this)
             Log.d("ThumbGrid", "publishSubtype lang=$lang info=${info != null}")
             if (info == null) return
-            val id = when (lang) { "ca" -> 1; "es" -> 2; else -> 3 }
-            val sub = InputMethodSubtype.InputMethodSubtypeBuilder()
-                .setSubtypeLocale(lang)
-                .setSubtypeMode("keyboard")
-                .setSubtypeId(id)
-                .setLanguageTag(lang)
-                .build()
-            imm.setAdditionalInputMethodSubtypes(info.id, arrayOf(sub))
-            imm.setCurrentInputMethodSubtype(sub)
+            val target = (0 until info.subtypeCount)
+                .map { info.getSubtypeAt(it) }
+                .firstOrNull { it.locale == lang }
+            Log.d("ThumbGrid", "publishSubtype target=${target?.locale}")
+            if (target != null) imm.setCurrentInputMethodSubtype(target)
         } catch (e: Exception) {
             Log.e("ThumbGrid", "publishSubtype error", e)
         }
     }
+    // Nota: a MIUI, Settings.Secure.selected_input_method_subtype no es pot canviar
+    // des d'un IME de tercers (el seu servei aplica criteri per locale del sistema).
+    // Aquesta crida és correcta i funciona a AOSP i altres capes; al MIUI només
+    // afecta el comportament intern, no l'etiqueta del selector.
 
     override fun onCreateInputView(): View {
         val view = DualGridView(this)
