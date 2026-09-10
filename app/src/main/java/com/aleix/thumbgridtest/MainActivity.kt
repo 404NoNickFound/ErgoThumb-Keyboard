@@ -1,10 +1,12 @@
 package com.aleix.thumbgridtest
 
+import android.annotation.SuppressLint
 import android.app.AlertDialog
 import android.app.KeyguardManager
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
+import android.content.res.ColorStateList
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -23,6 +25,8 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
+import android.view.inputmethod.InputMethodSubtype
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -36,8 +40,6 @@ import com.google.android.material.slider.Slider
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.hypot
-import android.content.res.ColorStateList
-
 
 object Prefs {
     const val NAME = "thumbgrid_prefs"
@@ -60,6 +62,7 @@ object Prefs {
     const val KEY_APP_LANG = "app_lang"
     const val KEY_COLOR_DARK = "color_dark"
     const val KEY_COLOR_LIGHT = "color_light"
+    const val KEY_SPACEBAR_H = "spacebar_h"
 
     const val KEY_MARGIN_SIDE = "margin_side"
     const val KEY_MARGIN_LEFT = "margin_left"
@@ -87,6 +90,7 @@ object Prefs {
     const val DEFAULT_ANIM_SCALE = 100f
     const val DEFAULT_VMAX = 20f
     const val DEFAULT_CASE_MS = 260f
+    const val DEFAULT_SPACEBAR_H = 56f
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences(NAME, Context.MODE_PRIVATE)
 
@@ -107,6 +111,7 @@ object Prefs {
     fun appLang(ctx: Context) = prefs(ctx).getString(KEY_APP_LANG, "ca") ?: "ca"
     fun colorDark(ctx: Context) = prefs(ctx).getInt(KEY_COLOR_DARK, 0)
     fun colorLight(ctx: Context) = prefs(ctx).getInt(KEY_COLOR_LIGHT, 0)
+    fun spaceBarH(ctx: Context) = prefs(ctx).getFloat(KEY_SPACEBAR_H, DEFAULT_SPACEBAR_H)
 
     fun marginSide(ctx: Context) = prefs(ctx).getFloat(KEY_MARGIN_SIDE, DEFAULT_MARGIN_SIDE)
     fun marginIndep(ctx: Context) = prefs(ctx).getBoolean(KEY_MARGIN_INDEP, false)
@@ -401,7 +406,6 @@ class SettingsActivity : AppCompatActivity() {
         AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(Prefs.appLang(this)))
 
         val scroll = ScrollView(this).apply { }
-
         root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(48, 48, 48, 48)
@@ -410,6 +414,7 @@ class SettingsActivity : AppCompatActivity() {
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
         ))
+
         val th = Themes.current(this)
         accent = th.principal
         poleCol = th.pole
@@ -441,8 +446,11 @@ class SettingsActivity : AppCompatActivity() {
         mSlider(R.string.slider_gap, 0f, 15f, Prefs.gap(this) * 100f,
             { getString(R.string.fmt_percent_width, it.toInt()) })
         { v -> putF(Prefs.KEY_GAP, v / 100f) }
+        mSlider(R.string.slider_spacebar_h, 24f, 120f, Prefs.spaceBarH(this),
+            { getString(R.string.fmt_u, it.toInt()) })
+        { v -> putF(Prefs.KEY_SPACEBAR_H, v) }
         marginsBlock()
-        mSlider(R.string.slider_margin_bottom, 8f, 25f, Prefs.marginBottom(this),
+        mSlider(R.string.slider_margin_bottom, 0f, 25f, Prefs.marginBottom(this),
             { getString(R.string.fmt_percent_height, it.toInt()) })
         { v -> putF(Prefs.KEY_MARGIN_BOTTOM, v) }
 
@@ -706,8 +714,11 @@ class SettingsActivity : AppCompatActivity() {
         fun refresh() {
             val i = indep.isChecked
             sym.isEnabled = !i
+            sym.alpha = if (i) 0.35f else 1f
             left.isEnabled = i
+            left.alpha = if (i) 1f else 0.35f
             right.isEnabled = i
+            right.alpha = if (i) 1f else 0.35f
         }
         indep.setOnCheckedChangeListener { _, checked ->
             if (checked) {
@@ -862,6 +873,28 @@ class ThumbImeService : InputMethodService() {
 
     private var gridView: DualGridView? = null
 
+    @SuppressLint("MissingPermission")
+    private fun publishSubtype() {
+        try {
+            val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
+            val info = imm.enabledInputMethodList.firstOrNull { it.packageName == packageName }
+            val lang = Prefs.lang(this)
+            Log.d("ThumbGrid", "publishSubtype lang=$lang info=${info != null}")
+            if (info == null) return
+            val id = when (lang) { "ca" -> 1; "es" -> 2; else -> 3 }
+            val sub = InputMethodSubtype.InputMethodSubtypeBuilder()
+                .setSubtypeLocale(lang)
+                .setSubtypeMode("keyboard")
+                .setSubtypeId(id)
+                .setLanguageTag(lang)
+                .build()
+            imm.setAdditionalInputMethodSubtypes(info.id, arrayOf(sub))
+            imm.setCurrentInputMethodSubtype(sub)
+        } catch (e: Exception) {
+            Log.e("ThumbGrid", "publishSubtype error", e)
+        }
+    }
+
     override fun onCreateInputView(): View {
         val view = DualGridView(this)
         view.textTarget = object : TextTarget {
@@ -915,7 +948,9 @@ class ThumbImeService : InputMethodService() {
                 }
             }
         }
+        view.onLangChanged = { publishSubtype() }
         gridView = view
+        publishSubtype()
         return view
     }
 
@@ -929,6 +964,8 @@ class ThumbImeService : InputMethodService() {
         }
         gridView?.reloadPrefs()
         gridView?.sensitiveField = isSensitiveField(info)
+        publishSubtype()
+        Handler(Looper.getMainLooper()).postDelayed({ publishSubtype() }, 600)
     }
 
     override fun onUpdateSelection(
@@ -963,6 +1000,7 @@ class DualGridView(context: Context) : View(context) {
 
     var textTarget: TextTarget? = null
     var sensitiveField = false
+    var onLangChanged: (() -> Unit)? = null
 
     private enum class GridSide { LEFT, RIGHT }
     private enum class Zone { LEFT, RIGHT, SPACE, BAR, SLIDER, CAPSULE }
@@ -1069,6 +1107,7 @@ class DualGridView(context: Context) : View(context) {
     private var marginLeftPct = Prefs.marginLeft(context)
     private var marginRightPct = Prefs.marginRight(context)
     private var marginBottomPct = Prefs.marginBottom(context)
+    private var spaceBarHU = Prefs.spaceBarH(context)
     private var animStrong = Prefs.animStrong(context)
     private var animDepth = Prefs.animDepth(context)
     private var animHelp = Prefs.animHelp(context)
@@ -1115,6 +1154,7 @@ class DualGridView(context: Context) : View(context) {
         marginLeftPct = Prefs.marginLeft(context)
         marginRightPct = Prefs.marginRight(context)
         marginBottomPct = Prefs.marginBottom(context)
+        spaceBarHU = Prefs.spaceBarH(context)
         animStrong = Prefs.animStrong(context)
         animDepth = Prefs.animDepth(context)
         animHelp = Prefs.animHelp(context)
@@ -1139,6 +1179,13 @@ class DualGridView(context: Context) : View(context) {
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         attachTime = SystemClock.uptimeMillis()
+        presses.clear()
+        fadingPresses.clear()
+        feedbacks.clear()
+        slides.clear()
+        caseAnimStart = -1L
+        caseInitialized = false
+        barP = barTarget
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
@@ -1204,9 +1251,10 @@ class DualGridView(context: Context) : View(context) {
         val gridTop: Float,
         val rowH: Float, val colW: Float, val gapU: Float,
         val padH: Float, val padV: Float,
-        val gapLeft: Float, val gapRight: Float, val pillW: Float,
+        val leftOrigin: Float, val rightOrigin: Float,
         val contentLeft: Float, val contentWidth: Float,
-        val capsuleTop: Float, val capsuleH: Float
+        val capsuleTop: Float, val capsuleH: Float,
+        val pillRect: RectF, val conventional: Boolean
     )
 
     private fun geo(): Geo {
@@ -1217,27 +1265,36 @@ class DualGridView(context: Context) : View(context) {
         val bottomExtra = height * (marginBottomPct / 100f)
         val zoneTop = height - bottomExtra - sliderZone
         val gridTop = barP * stripH
-        val gridH = zoneTop - gridTop
         val contentLeft = width * (marginLeftPct / 100f)
         val contentWidth = width - contentLeft - width * (marginRightPct / 100f)
         val avail = contentWidth - 2 * padH
-        val pillW = maxOf(px(24f), contentWidth * gapFraction)
-        val colW = (avail - pillW - 6 * gapU) / 6f
-        val gridW = 3 * colW + 2 * gapU
-        val gapLeft = contentLeft + padH + gridW + gapU
-        val gapRight = gapLeft + pillW
-        val rowH = (gridH - 2 * padV - 2 * gapU) / 3f
+        val conventional = gapFraction <= 0.001f
+        val pillW = if (conventional) 0f else maxOf(px(24f), contentWidth * gapFraction)
+        val colW = if (conventional) (avail - 5 * gapU) / 6f
+        else (avail - pillW - 6 * gapU) / 6f
+        val leftOrigin = contentLeft + padH
+        val rightOrigin = if (conventional) leftOrigin + 3 * colW + 3 * gapU
+        else leftOrigin + 3 * colW + pillW + 4 * gapU
+        val spaceBarH = px(spaceBarHU)
+        val rowH = if (conventional) (zoneTop - gridTop - 2 * padV - 3 * gapU - spaceBarH) / 3f
+        else (zoneTop - gridTop - 2 * padV - 2 * gapU) / 3f
+        val pillRect = if (conventional) {
+            val top = gridTop + padV + 3 * rowH + 3 * gapU
+            RectF(leftOrigin, top, leftOrigin + 6 * colW + 5 * gapU, top + spaceBarH)
+        } else {
+            val gl = leftOrigin + 3 * colW + 3 * gapU
+            RectF(gl, gridTop + padV, gl + pillW, gridTop + padV + 3 * rowH + 2 * gapU)
+        }
         val sliderTop = zoneTop + (sliderZone - sliderH) / 2f
         val capsuleH = (sliderZone - sliderH) / 2f
         val capsuleTop = zoneTop
         return Geo(stripH, sliderZone, sliderTop, sliderH, gridTop, rowH, colW, gapU,
-            padH, padV, gapLeft, gapRight, pillW, contentLeft, contentWidth,
-            capsuleTop, capsuleH)
+            padH, padV, leftOrigin, rightOrigin, contentLeft, contentWidth,
+            capsuleTop, capsuleH, pillRect, conventional)
     }
 
     private fun cellRect(g: Geo, side: GridSide, row: Int, col: Int): RectF {
-        val originX = if (side == GridSide.LEFT) g.contentLeft + g.padH
-        else g.gapRight + g.gapU
+        val originX = if (side == GridSide.LEFT) g.leftOrigin else g.rightOrigin
         val x = originX + col * (g.colW + g.gapU)
         val y = g.gridTop + g.padV + row * (g.rowH + g.gapU)
         return RectF(x, y, x + g.colW, y + g.rowH)
@@ -1260,6 +1317,7 @@ class DualGridView(context: Context) : View(context) {
         lang = enabled[(idx + 1) % enabled.size]
         layout = Layouts.forLang(lang)
         Prefs.setLang(context, lang)
+        onLangChanged?.invoke()
         kickAnim()
     }
 
@@ -1619,10 +1677,10 @@ class DualGridView(context: Context) : View(context) {
 
                     canvas.save()
                     canvas.clipRect(r)
-                    val yC = -(letterPaint.descent() + letterPaint.ascent()) / 2f
-                    val midY = r.centerY() + yC
                     letterPaint.textSize = px(28f)
                     letterPaint.color = theme.text
+                    val yC = -(letterPaint.descent() + letterPaint.ascent()) / 2f
+                    val midY = r.centerY() + yC
                     val lower = key.tap
                     val upper = key.tap.uppercase()
                     if (fb != null && fbT < 0.75f) {
@@ -1664,7 +1722,7 @@ class DualGridView(context: Context) : View(context) {
                         }
                         val inCh = if (shiftCaps) upper else lower
                         val outCh = if (caseFromUpper) upper else lower
-                        letterPaint.typeface = if (capsVisual) fontSemiBold else fontMedium
+                        letterPaint.typeface = if (shiftCaps) fontSemiBold else fontMedium
                         canvas.drawText(inCh, r.centerX(), midY + yIn, letterPaint)
                         letterPaint.typeface = if (caseFromUpper) fontSemiBold else fontMedium
                         canvas.drawText(outCh, r.centerX(), midY + yOut, letterPaint)
@@ -1712,19 +1770,25 @@ class DualGridView(context: Context) : View(context) {
                 val fbT = if (fb != null) t01(fb.start, fbDur(), now) else 1f
                 val label = if (fb != null && fbT < 0.75f) fb.char
                 else if (capsVisual) key.tap.uppercase() else key.tap
-                val yC = -(letterPaint.descent() + letterPaint.ascent()) / 2f
                 letterPaint.textSize = px(28f)
+                val yC = -(letterPaint.descent() + letterPaint.ascent()) / 2f
                 val centerScale = if (p.sel != SwipeDir.TAP) 0.9f else 1f
                 letterPaint.typeface =
                     if (fb != null || p.sel == SwipeDir.TAP || capsVisual) fontSemiBold else fontMedium
                 letterPaint.color = theme.text
                 canvas.save()
+                canvas.clipRect(lr)
                 canvas.translate(cx, cy + yC)
                 canvas.scale(centerScale, centerScale)
                 canvas.drawText(label, 0f, 0f, letterPaint)
                 canvas.restore()
 
-                if (fb == null) drawHints(canvas, key, lr, capsVisual, p, now, flashed = animHelp)
+                if (fb == null) {
+                    canvas.save()
+                    canvas.clipRect(lr)
+                    drawHints(canvas, key, lr, capsVisual, p, now, flashed = animHelp)
+                    canvas.restore()
+                }
             }
         }
 
@@ -1732,8 +1796,7 @@ class DualGridView(context: Context) : View(context) {
         if (!pillDownNow && pillWasDown) pillReleasedAt = now
         pillWasDown = pillDownNow
 
-        val pillRect = RectF(g.gapLeft, g.gridTop + g.padV,
-            g.gapRight, g.gridTop + g.padV + 3 * g.rowH + 2 * g.gapU)
+        val pillRect = g.pillRect
         var pillColor = theme.role[Themes.KEYCAP]
         val pillFb = feedbacks.firstOrNull { it.pill }
         val pillFbT = if (pillFb != null) t01(pillFb.start, fbDur(), now) else 1f
@@ -1743,9 +1806,9 @@ class DualGridView(context: Context) : View(context) {
             else -> 0f
         }
         if (pillFlash > 0f) pillColor = blendColor(pillColor, theme.flashPole, pillFlash)
-        if (theme.keycapShadow) drawSoftShadow(canvas, pillRect, g.pillW / 2f)
+        if (theme.keycapShadow) drawSoftShadow(canvas, pillRect, pillRect.height() / 2f)
         keycapPaint.color = pillColor
-        canvas.drawRoundRect(pillRect, g.pillW / 2f, g.pillW / 2f, keycapPaint)
+        canvas.drawRoundRect(pillRect, pillRect.height() / 2f, pillRect.height() / 2f, keycapPaint)
 
         if (shiftMode == ShiftMode.CAPS) {
             drawIcon(canvas, Icon.CAPS, pillRect.centerX(), pillRect.centerY(), px(24f))
@@ -1862,9 +1925,6 @@ class DualGridView(context: Context) : View(context) {
             }
         }
 
-        // Blindatge anti-fotograma-congelat: si queda alguna animació viva,
-        // el propi onDraw re-programa el següent fotograma. Cap marc a mig
-        // fer pot quedar-se pintat per sempre (adiós "L levitant" i glifs encallats).
         if (caseAnimStart >= 0L && caseT >= 1f) caseAnimStart = -1L
         if (anyAnimActive(now)) kickAnim()
     }
@@ -1892,6 +1952,7 @@ class DualGridView(context: Context) : View(context) {
                 val capExtra = px(12f)
                 val kd = knobD(g)
                 val kcx = knobCenterX(g) + knobP * knobTravel(g)
+                val leftEdge = g.leftOrigin + 3 * g.colW + 2 * g.gapU
                 when {
                     barP > 0.5f && y < g.gridTop -> {
                         zone = Zone.BAR
@@ -1909,16 +1970,19 @@ class DualGridView(context: Context) : View(context) {
                             knobSpringStart = -1L
                         }
                     }
-                    x < g.gapLeft && x >= g.contentLeft -> {
+                    g.pillRect.contains(x, y) -> {
+                        zone = Zone.SPACE
+                    }
+                    x < leftEdge && x >= g.contentLeft -> {
                         side = GridSide.LEFT
                         zone = Zone.LEFT
-                        col = ((x - (g.contentLeft + g.padH)) / (g.colW + g.gapU)).toInt().coerceIn(0, 2)
+                        col = ((x - g.leftOrigin) / (g.colW + g.gapU)).toInt().coerceIn(0, 2)
                         row = ((y - (g.gridTop + g.padV)) / (g.rowH + g.gapU)).toInt().coerceIn(0, 2)
                     }
-                    x > g.gapRight && x <= g.contentLeft + g.contentWidth -> {
+                    x >= g.rightOrigin && x <= g.contentLeft + g.contentWidth -> {
                         side = GridSide.RIGHT
                         zone = Zone.RIGHT
-                        col = ((x - (g.gapRight + g.gapU)) / (g.colW + g.gapU)).toInt().coerceIn(0, 2)
+                        col = ((x - g.rightOrigin) / (g.colW + g.gapU)).toInt().coerceIn(0, 2)
                         row = ((y - (g.gridTop + g.padV)) / (g.rowH + g.gapU)).toInt().coerceIn(0, 2)
                     }
                     else -> zone = Zone.SPACE

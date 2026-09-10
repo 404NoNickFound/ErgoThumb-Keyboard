@@ -75,4 +75,6 @@
     <string name="color_default">Default</string>
     <string name="color_save">Save</string>
     <string name="color_custom">Custom color…</string>
+    <string name="slider_spacebar_h">Space bar height (no pill)</string>
+    <string name="fmt_u">%1$d u</string>
 </resources>

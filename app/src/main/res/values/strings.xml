@@ -75,4 +75,6 @@
     <string name="color_default">Per defecte</string>
     <string name="color_save">Desa</string>
     <string name="color_custom">Color personalitzat…</string>
+    <string name="slider_spacebar_h">Alçada de la barra d\'espai (sense pill)</string>
+    <string name="fmt_u">%1$d u</string>
 </resources>

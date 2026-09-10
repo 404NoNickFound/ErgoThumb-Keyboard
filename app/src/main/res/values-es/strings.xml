@@ -75,4 +75,6 @@
     <string name="color_default">Por defecto</string>
     <string name="color_save">Guardar</string>
     <string name="color_custom">Color personalizado…</string>
+    <string name="slider_spacebar_h">Altura de la barra de espacio (sin pill)</string>
+    <string name="fmt_u">%1$d u</string>
 </resources>
