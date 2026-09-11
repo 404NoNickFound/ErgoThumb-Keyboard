@@ -1,4 +1,18 @@
 <resources>
+    <string name="tutorial_target_word">casa</string>
+    <string name="tutorial_target_phrase">¿Quién quiere kiwi y chocolate?</string>
+    <string-array name="section_explains">
+        <item>Aquí eliges qué idiomas circularán en el teclado y el idioma de la interfaz.</item>
+        <item>Aquí personalizas los colores (oscuro y claro) del teclado y de la app.</item>
+        <item>Aquí ajustas la altura, la separación de rejillas, la barra de espacio y los márgenes.</item>
+        <item>Aquí regulas umbrales y sensibilidades de gestos, cursor y borrado.</item>
+        <item>Aquí activas o desactivas comodidades como mayúscula o espacio automáticos.</item>
+        <item>Aquí controlas qué animaciones se hacen y cuán rápidas.</item>
+        <item>Aquí gestionas el registro de bigrams (privacidad) y opciones avanzadas.</item>
+        <item>Aquí encuentras el tutorial de nuevo y el enlace a GitHub para reportar bugs.</item>
+    </string-array>
+    <string name="gate_title">Activa el teclado primero</string>
+    <string name="gate_desc">El tutorial (y el teclado) necesitan que actives ThumbGridTest en los ajustes de teclados del sistema. Hazlo y vuelve aquí para continuar; el tutorial se desbloqueará solo.</string>
     <string name="app_name">ThumbGridTest</string>
     <string name="subtype_ca">Català</string>
     <string name="subtype_es">Castellano</string>
@@ -15,6 +29,7 @@
     <string name="section_geometry">Tamaño y geometría</string>
     <string name="section_animations">Animaciones</string>
     <string name="section_advanced">Avanzado</string>
+    <string name="section_help">Ayuda</string>
     <string name="app_language">Idioma de la app</string>
     <string name="lang_ca">Català</string>
     <string name="lang_es">Castellano</string>
@@ -29,6 +44,8 @@
     <string name="slider_margin_right">Margen derecho</string>
     <string name="slider_margin_bottom">Margen inferior (barra)</string>
     <string name="fmt_percent_height">%1$d%% de la altura</string>
+    <string name="slider_spacebar_h">Altura de la barra de espacio (sin pill)</string>
+    <string name="fmt_u">%1$d u</string>
     <string name="slider_threshold">Umbral de gesto</string>
     <string name="fmt_dp">%1$d dp</string>
     <string name="slider_double">Tiempo de doble acción</string>
@@ -52,6 +69,7 @@
     <string name="switch_anim_help">Ayuda visual (flash y sustitución de carácter)</string>
     <string name="switch_anim_trace">Mostrar la traza del gesto (línea guía)</string>
     <string name="switch_bigrams">Registrar bigrams para optimizar el layout</string>
+    <string name="switch_erase_precision">Mejora la precisión de borrado y rehacer palabras</string>
     <string name="bigrams_empty">Registro de bigrams: vacío</string>
     <string name="bigrams_summary">Registro de bigrams: %1$s</string>
     <string name="btn_delete_bigrams">Borrar el registro de bigrams</string>
@@ -75,6 +93,50 @@
     <string name="color_default">Por defecto</string>
     <string name="color_save">Guardar</string>
     <string name="color_custom">Color personalizado…</string>
-    <string name="slider_spacebar_h">Altura de la barra de espacio (sin pill)</string>
-    <string name="fmt_u">%1$d u</string>
+    <string name="help_replay">Repetir el tutorial</string>
+    <string name="help_github">GitHub / reportar bugs</string>
+    <string name="github_not_published">El repositorio aún no está publicado. Cuando lo esté, este botón llevará directamente a él.</string>
+    <string name="tutorial_skip">Saltar el tutorial</string>
+    <string name="tutorial_step_of">Paso %1$d de %2$d</string>
+    <string name="tutorial_continue">Continuar</string>
+    <string name="tutorial_finish">Finalizar</string>
+    <string name="sensitivity_note">Puedes ajustar la sensibilidad de varias cosas en el apartado Sensibilidad de los ajustes; no hay que ir una por una explicando las unidades.</string>
+    <string-array name="tutorial_text">
+        <item>Este es un texto de ejemplo para el tutorial. No hace falta que lo leas: está aquí para que pruebes las funciones del teclado.</item>
+        <item>Este texto es exclusivo del tutorial. Sirve para probar todas las funciones tanto en segmentos pequeños como en un párrafo entero.</item>
+        <item>Como podrás ver, todo está separado en pequeñas partes. Está hecho para que te resulte más fácil recordar qué frase estás borrando o rehaciendo, pero no te será importante en el apartado de deslizar.</item>
+        <item>Si estás leyendo esto, ya has llegado más lejos de lo que esperabas. La mayoría se rinde en el segundo párrafo y empieza a deslizar para borrarlo todo, que es exactamente lo que queríamos que hicieras.</item>
+        <item>Este último párrafo es deliberadamente largo para que puedas probar el borrado continuo manteniendo el dedo en el borde izquierdo, y para que el rehacer tenga bastante trabajo al volver. Si has borrado y rehecho todo esto sin perderte, ya tienes más control sobre el teclado que la mayoría de usuarios tendrán jamás, y ni siquiera has tenido que leer ningún manual de verdad.</item>
+        <item>P.D.: ¿De verdad has llegado a leerlo todo, o solo has mirado el final? Si lo has leído todo, enhorabuena: eres del 0,1% de usuarios que leen los textos de ejemplo. El teclado y yo estamos muy orgullosos de ti.</item>
+    </string-array>
+    <string-array name="tutorial_titles">
+        <item>Hazlo tuyo</item>
+        <item>Tocar = letra grande</item>
+        <item>Deslizar = miniletra</item>
+        <item>Escribe como siempre</item>
+        <item>Borrar por segmentos</item>
+        <item>Rehacer</item>
+        <item>Borrado continuo</item>
+        <item>Mayúsculas</item>
+        <item>Cursor y salto de línea</item>
+        <item>Números y páginas</item>
+        <item>Símbolos</item>
+        <item>Cambia de idioma</item>
+        <item>Ajustes y cómo ayudar</item>
+    </string-array>
+    <string-array name="tutorial_descs">
+        <item>Antes de empezar, deja el teclado a tu gusto: colores (oscuro y claro), altura, separación, margen inferior e idiomas de la cápsula.</item>
+        <item>Toca las letras grandes para escribirlas. Escribe la palabra CASA tocando solo letras grandes.</item>
+        <item>Las miniletras de las esquinas se escriben deslizando desde el centro hacia su dirección. Escribe la frase «¿Quién quiere kiwi y chocolate?» (el tutorial la verificará). Cuando la tengas, puedes probar otros gestos en cualquier letra sin que pase nada.</item>
+        <item>Ahora escribe una frase cualquiera como si nada. Normalmente no te harán falta gestos: el teclado es rápido incluso tocando solo letras grandes.</item>
+        <item>Desliza hacia la izquierda sobre la barra de espacio para borrar. Borra al menos dos frases cortas del texto.</item>
+        <item>Desliza hacia la derecha sobre la barra de espacio para rehacer. Recupera al menos lo mismo que has borrado.</item>
+        <item>Mantén el dedo en el borde izquierdo mientras deslizas para borrar en continuo. Vacía el párrafo largo.</item>
+        <item>Dos deslizamientos arriba seguidos activan el bloque mayúsculas: escribe tres mayúsculas y desactívalo con otro deslizamiento arriba.</item>
+        <item>Arrastra el botón redondo para llevar el cursor al final del segundo párrafo y haz un deslizamiento abajo sobre el espacio para insertar un salto de línea.</item>
+        <item>Un clic en el botón redondo abre los números: escribe un número, desliza la franja para ver más páginas e inserta el @ de la segunda.</item>
+        <item>Dos clics en el botón redondo abren la capa de símbolos: inserta un símbolo como € o © y ciérrala tocando abc.</item>
+        <item>Toca la cápsula del idioma (abajo a la izquierda) para cambiar de idioma y vuelve a tocarla hasta regresar al tuyo.</item>
+        <item>Cada tarjeta de aquí abajo es un apartado de los ajustes. Cuando el repositorio sea público, el botón te llevará a GitHub para reportar bugs.</item>
+    </string-array>
 </resources>

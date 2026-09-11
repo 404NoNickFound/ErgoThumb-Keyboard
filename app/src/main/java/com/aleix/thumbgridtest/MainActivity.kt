@@ -62,6 +62,8 @@ object Prefs {
     const val KEY_COLOR_DARK = "color_dark"
     const val KEY_COLOR_LIGHT = "color_light"
     const val KEY_SPACEBAR_H = "spacebar_h"
+    const val KEY_TUTORIAL_DONE = "tutorial_done"
+    const val KEY_ERASE_PRECISION = "erase_precision"
 
     const val KEY_MARGIN_SIDE = "margin_side"
     const val KEY_MARGIN_LEFT = "margin_left"
@@ -111,6 +113,8 @@ object Prefs {
     fun colorDark(ctx: Context) = prefs(ctx).getInt(KEY_COLOR_DARK, 0)
     fun colorLight(ctx: Context) = prefs(ctx).getInt(KEY_COLOR_LIGHT, 0)
     fun spaceBarH(ctx: Context) = prefs(ctx).getFloat(KEY_SPACEBAR_H, DEFAULT_SPACEBAR_H)
+    fun tutorialDone(ctx: Context) = prefs(ctx).getBoolean(KEY_TUTORIAL_DONE, false)
+    fun erasePrecision(ctx: Context) = prefs(ctx).getBoolean(KEY_ERASE_PRECISION, false)
 
     fun marginSide(ctx: Context) = prefs(ctx).getFloat(KEY_MARGIN_SIDE, DEFAULT_MARGIN_SIDE)
     fun marginIndep(ctx: Context) = prefs(ctx).getBoolean(KEY_MARGIN_INDEP, false)
@@ -237,6 +241,12 @@ class MainActivity : AppCompatActivity() {
 
         if (!Prefs.onboarded(this)) {
             setContentView(buildChooser())
+            return
+        }
+
+        if (!Prefs.tutorialDone(this)) {
+            startActivity(Intent(this, TutorialActivity::class.java))
+            finish()
             return
         }
 
@@ -399,12 +409,29 @@ class SettingsActivity : AppCompatActivity() {
         0xFFD08A3E.toInt(),
         0xFFC45252.toInt()
     )
+    companion object {
+        const val EXTRA_FOCUS = "focus_section"
+        val SECTION_KEYS = listOf(
+            "languages", "appearance", "geometry", "sensitivity",
+            "comfort", "animations", "advanced", "help"
+        )
+        val SECTION_TITLES = listOf(
+            R.string.section_languages, R.string.section_appearance,
+            R.string.section_geometry, R.string.section_sensitivity,
+            R.string.section_comfort, R.string.section_animations,
+            R.string.section_advanced, R.string.section_help
+        )
+    }
+
+    private lateinit var scroll: ScrollView
+    private val sectionHeaders = mutableListOf<TextView>()
+    private val sectionContainers = mutableListOf<LinearLayout>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(Prefs.appLang(this)))
 
-        val scroll = ScrollView(this).apply { }
+        scroll = ScrollView(this).apply { }
         root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(48, 48, 48, 48)
@@ -469,6 +496,8 @@ class SettingsActivity : AppCompatActivity() {
         mSlider(R.string.slider_sens_erase, 2f, 30f, Prefs.sensErase(this),
             { getString(R.string.fmt_chars_swipe, it.toInt()) })
         { v -> putF(Prefs.KEY_SENS_ERASE, v) }
+        mSwitch(R.string.switch_erase_precision, Prefs.erasePrecision(this))
+        { putB(Prefs.KEY_ERASE_PRECISION, it) }
         mSlider(R.string.slider_flick, 80f, 400f, Prefs.flickMs(this),
             { getString(R.string.fmt_ms, it.toInt()) })
         { v -> putF(Prefs.KEY_FLICK_MS, v) }
@@ -495,6 +524,18 @@ class SettingsActivity : AppCompatActivity() {
         section(R.string.section_advanced)
         bigramsBlock()
 
+        section(R.string.section_help)
+        add(MaterialButton(this).apply {
+            text = getString(R.string.help_replay)
+            setOnClickListener {
+                startActivity(Intent(this@SettingsActivity, TutorialActivity::class.java))
+            }
+        })
+        add(MaterialButton(this).apply {
+            text = getString(R.string.help_github)
+            setOnClickListener { openGithub() }
+        })
+
         root.addView(TextView(this).apply {
             text = getString(R.string.settings_note)
             textSize = 13f
@@ -510,7 +551,35 @@ class SettingsActivity : AppCompatActivity() {
             if (v is LinearLayout) for (i in 0 until v.childCount) tintAll(v.getChildAt(i))
         }
         tintAll(root)
+        val focus = intent.getStringExtra(EXTRA_FOCUS)
+        if (focus != null) {
+            val idx = SECTION_KEYS.indexOf(focus)
+            if (idx >= 0 && idx < sectionContainers.size) {
+                sectionContainers[idx].visibility = View.VISIBLE
+                sectionHeaders[idx].text = "▼  " + getString(SECTION_TITLES[idx])
+                scroll.post {
+                    scroll.scrollTo(0, sectionHeaders[idx].top)
+                    AlertDialog.Builder(this)
+                        .setTitle(getString(SECTION_TITLES[idx]))
+                        .setMessage(resources.getStringArray(R.array.section_explains)
+                            .getOrElse(idx) { "" })
+                        .setPositiveButton(getString(R.string.close), null)
+                        .show()
+                }
+            }
+        }
         setContentView(scroll)
+    }
+
+    private fun openGithub() {
+        if (TutorialActivity.GITHUB_URL.isEmpty()) {
+            AlertDialog.Builder(this)
+                .setMessage(getString(R.string.github_not_published))
+                .setPositiveButton(getString(R.string.close), null)
+                .show()
+        } else {
+            startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(TutorialActivity.GITHUB_URL)))
+        }
     }
 
     private fun putF(key: String, v: Float) =
@@ -542,6 +611,8 @@ class SettingsActivity : AppCompatActivity() {
         root.addView(header)
         root.addView(container)
         currentContainer = container
+        sectionHeaders.add(header)
+        sectionContainers.add(container)
     }
 
     private fun mSwitch(labelRes: Int, current: Boolean, onValue: (Boolean) -> Unit): MaterialSwitch {
@@ -1000,6 +1071,8 @@ class DualGridView(context: Context) : View(context) {
     var textTarget: TextTarget? = null
     var sensitiveField = false
     var onLangChanged: (() -> Unit)? = null
+    var tutorialMode = false
+    var tutEvent: ((String) -> Unit)? = null
 
     private enum class GridSide { LEFT, RIGHT }
     private enum class Zone { LEFT, RIGHT, SPACE, BAR, SLIDER, CAPSULE, SYMBOL }
@@ -1100,6 +1173,8 @@ class DualGridView(context: Context) : View(context) {
     private var pillWasDown = false
     private var pillReleasedAt = -1L
 
+    private var erasePauseUntil = 0L
+
     private var heightFraction = Prefs.height(context)
     private var gapFraction = Prefs.gap(context)
     private var swipeThreshold = Prefs.threshold(context) * resources.displayMetrics.density
@@ -1112,6 +1187,7 @@ class DualGridView(context: Context) : View(context) {
     private var flickWindowMs = Prefs.flickMs(context)
     private var showHints = Prefs.showHints(context)
     private var bigramsEnabled = Prefs.bigrams(context)
+    private var erasePrecision = Prefs.erasePrecision(context)
     private var marginLeftPct = Prefs.marginLeft(context)
     private var marginRightPct = Prefs.marginRight(context)
     private var marginBottomPct = Prefs.marginBottom(context)
@@ -1159,6 +1235,7 @@ class DualGridView(context: Context) : View(context) {
         flickWindowMs = Prefs.flickMs(context)
         showHints = Prefs.showHints(context)
         bigramsEnabled = Prefs.bigrams(context)
+        erasePrecision = Prefs.erasePrecision(context)
         marginLeftPct = Prefs.marginLeft(context)
         marginRightPct = Prefs.marginRight(context)
         marginBottomPct = Prefs.marginBottom(context)
@@ -1253,6 +1330,14 @@ class DualGridView(context: Context) : View(context) {
         return false
     }
 
+    private fun noteBoundary(ch: String) {
+        val now = SystemClock.uptimeMillis()
+        if (ch == "\n") erasePauseUntil = now + 100L
+        else if (erasePrecision && ch == " ") erasePauseUntil = now + 100L
+    }
+
+    private fun erasePaused() = SystemClock.uptimeMillis() < erasePauseUntil
+
     private data class Geo(
         val stripH: Float, val sliderZone: Float,
         val sliderTop: Float, val sliderH: Float,
@@ -1326,6 +1411,7 @@ class DualGridView(context: Context) : View(context) {
         layout = Layouts.forLang(lang)
         Prefs.setLang(context, lang)
         onLangChanged?.invoke()
+        tutEvent?.invoke("lang")
         kickAnim()
     }
 
@@ -1357,13 +1443,15 @@ class DualGridView(context: Context) : View(context) {
             textTarget?.commit(" ")
         }
         undoStack.clear()
-        if (bigramsEnabled && !sensitiveField && out.length == 1 && out[0].isLetter()) {
+        if (bigramsEnabled && !sensitiveField && !tutorialMode &&
+            out.length == 1 && out[0].isLetter()) {
             val cur = out.lowercase()
             lastLetter?.let { prev -> logBigram(prev, cur) }
             lastLetter = cur
         } else {
             lastLetter = null
         }
+        tutEvent?.invoke("commit:$out")
         invalidate()
         return out
     }
@@ -1383,12 +1471,23 @@ class DualGridView(context: Context) : View(context) {
         val runnable = object : Runnable {
             override fun run() {
                 val s = activePointers[id] ?: return
+                val now = SystemClock.uptimeMillis()
+                if (now < erasePauseUntil) {
+                    handler.postDelayed(this, 30L)
+                    return
+                }
                 if (leftward) {
                     val ch = textTarget?.deleteBefore() ?: ""
-                    if (ch.isNotEmpty()) { undoStack.addLast(ch); s.deleted++ }
+                    if (ch.isNotEmpty()) {
+                        undoStack.addLast(ch); s.deleted++
+                        tutEvent?.invoke("delete"); noteBoundary(ch)
+                    }
                 } else {
                     val ch = undoStack.removeLastOrNull()
-                    if (ch != null) { textTarget?.commit(ch); s.redone++ }
+                    if (ch != null) {
+                        textTarget?.commit(ch); s.redone++
+                        tutEvent?.invoke("redo"); noteBoundary(ch)
+                    }
                 }
                 s.edgeInterval = maxOf(30L, (s.edgeInterval * 0.85).toLong())
                 handler.postDelayed(this, s.edgeInterval)
@@ -1415,6 +1514,7 @@ class DualGridView(context: Context) : View(context) {
         if (n == 0) return
         textTarget?.moveCursor(n, cursorWord)
         tickOffset += n * px(12f)
+        tutEvent?.invoke("cursor")
     }
 
     private val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -1569,6 +1669,40 @@ class DualGridView(context: Context) : View(context) {
         else 1f - cubicOut(t01(p.release, dur(100), now))
     }
 
+    // --- Ancoratges normalitzats (0..1) per al DemoOverlay del tutorial ---
+    fun demoCell(side: Int, row: Int, col: Int): RectF? {
+        if (width == 0 || height == 0) return null
+        val g = geo()
+        val r = cellRect(g, if (side == 0) GridSide.LEFT else GridSide.RIGHT, row, col)
+        return RectF(r.left / width, r.top / height, r.right / width, r.bottom / height)
+    }
+
+    fun demoPill(): RectF? {
+        if (width == 0 || height == 0) return null
+        val g = geo()
+        val r = g.pillRect
+        return RectF(r.left / width, r.top / height, r.right / width, r.bottom / height)
+    }
+
+    fun demoKnob(): FloatArray? {
+        if (width == 0 || height == 0) return null
+        val g = geo()
+        return floatArrayOf(knobCenterX(g) / width, (g.sliderTop + g.sliderH / 2f) / height)
+    }
+
+    fun demoCapsule(): FloatArray? {
+        if (width == 0 || height == 0) return null
+        val g = geo()
+        return floatArrayOf(
+            (g.contentLeft + px(8f) + capsuleWidth() / 2f) / width,
+            (g.capsuleTop + g.capsuleH / 2f) / height
+        )
+    }
+
+    fun demoStripY(): Float {
+        val g = geo()
+        return (g.stripH / 2f) / height.coerceAtLeast(1)
+    }
     private fun drawSymbolLayer(canvas: Canvas, g: Geo) {
         val area = RectF(g.contentLeft, g.gridTop, g.contentLeft + g.contentWidth, g.capsuleTop)
         keycapPaint.color = theme.role[Themes.BG]
@@ -2084,10 +2218,10 @@ class DualGridView(context: Context) : View(context) {
                         if (state.knobDrag) {
                             val travel = knobTravel(g)
                             val p = ((x - state.grabX) / travel).coerceIn(-1f, 1f)
+                            val deltaChars = (p - state.knobP) * sensChars
                             state.knobP = p
                             knobP = p
-                            val v = vmax * p
-                            state.cursorAcc += v * dt / 1000f
+                            state.cursorAcc += deltaChars
                             val n = state.cursorAcc.toInt()
                             if (n != 0) { sliderMove(n); state.cursorAcc -= n }
                             kickAnim()
@@ -2115,8 +2249,12 @@ class DualGridView(context: Context) : View(context) {
                                 if (n > 0) {
                                     state.eraseAcc -= n
                                     repeat(n) {
+                                        if (erasePaused()) return@repeat
                                         val ch = textTarget?.deleteBefore() ?: ""
-                                        if (ch.isNotEmpty()) { undoStack.addLast(ch); state.deleted++ }
+                                        if (ch.isNotEmpty()) {
+                                            undoStack.addLast(ch); state.deleted++
+                                            tutEvent?.invoke("delete"); noteBoundary(ch)
+                                        }
                                     }
                                 }
                             } else if (dxEvent > 0f) {
@@ -2125,9 +2263,11 @@ class DualGridView(context: Context) : View(context) {
                                 if (n > 0) {
                                     state.redoAcc -= n
                                     repeat(n) {
+                                        if (erasePaused()) return@repeat
                                         val ch = undoStack.removeLastOrNull() ?: return@repeat
                                         textTarget?.commit(ch)
                                         state.redone++
+                                        tutEvent?.invoke("redo"); noteBoundary(ch)
                                     }
                                 }
                             }
@@ -2188,10 +2328,12 @@ class DualGridView(context: Context) : View(context) {
             lastCenterTapTime = 0L
             symbolLayer = !symbolLayer
             barVisible = false
+            tutEvent?.invoke(if (symbolLayer) "symopen" else "symclose")
         } else {
             lastCenterTapTime = now
             barVisible = !barVisible
             barPage = 0
+            if (barVisible) tutEvent?.invoke("bar")
         }
         barTarget = if (barVisible) 1f else 0f
         barAnimFrom = barP
@@ -2220,9 +2362,14 @@ class DualGridView(context: Context) : View(context) {
                         barAnimFrom = barP
                         barAnimStart = SystemClock.uptimeMillis()
                         if (!animStrong) barP = 1f
+                        tutEvent?.invoke("bar")
                         kickAnim()
                     }
-                    "ABC" -> { symbolLayer = false; kickAnim() }
+                    "ABC" -> {
+                        symbolLayer = false
+                        tutEvent?.invoke("symclose")
+                        kickAnim()
+                    }
                     "SPACE" -> { textTarget?.commit(" "); undoStack.clear() }
                     "BACK" -> {
                         val ch = textTarget?.deleteBefore() ?: ""
@@ -2238,9 +2385,11 @@ class DualGridView(context: Context) : View(context) {
                     commitChar(barPages[barPage][state.cellIndex])
                 } else if (dir == SwipeDir.W) {
                     barPage = (barPage + 1).coerceAtMost(barPages.size - 1)
+                    tutEvent?.invoke("barpage")
                     invalidate()
                 } else if (dir == SwipeDir.E) {
                     barPage = (barPage - 1).coerceAtLeast(0)
+                    tutEvent?.invoke("barpage")
                     invalidate()
                 }
             }
@@ -2274,14 +2423,22 @@ class DualGridView(context: Context) : View(context) {
                 SwipeDir.W -> {
                     if (state.deleted == 0 && state.redone == 0) {
                         val ch = textTarget?.deleteBefore() ?: ""
-                        if (ch.isNotEmpty()) undoStack.addLast(ch)
+                        if (ch.isNotEmpty()) {
+                            undoStack.addLast(ch)
+                            tutEvent?.invoke("delete")
+                            noteBoundary(ch)
+                        }
                     }
                     slides.add(GlyphSlide(Icon.BACK, dir, SystemClock.uptimeMillis()))
                     kickAnim()
                 }
                 SwipeDir.E -> {
                     if (state.deleted == 0 && state.redone == 0) {
-                        undoStack.removeLastOrNull()?.let { textTarget?.commit(it) }
+                        undoStack.removeLastOrNull()?.let {
+                            textTarget?.commit(it)
+                            tutEvent?.invoke("redo")
+                            noteBoundary(it)
+                        }
                     }
                     slides.add(GlyphSlide(Icon.REDO, dir, SystemClock.uptimeMillis()))
                     kickAnim()
@@ -2289,6 +2446,7 @@ class DualGridView(context: Context) : View(context) {
                 SwipeDir.S, SwipeDir.SE, SwipeDir.SW -> {
                     textTarget?.enter()
                     undoStack.clear()
+                    tutEvent?.invoke("enter")
                     slides.add(GlyphSlide(Icon.ENTER, SwipeDir.S, SystemClock.uptimeMillis()))
                     kickAnim()
                 }
@@ -2306,6 +2464,10 @@ class DualGridView(context: Context) : View(context) {
                             ShiftMode.ONCE
                         }
                     }
+                    if (shiftMode == ShiftMode.CAPS && prevMode != ShiftMode.CAPS)
+                        tutEvent?.invoke("capsOn")
+                    if (shiftMode == ShiftMode.OFF && prevMode == ShiftMode.CAPS)
+                        tutEvent?.invoke("capsOff")
                     val icon = if (shiftMode == ShiftMode.CAPS && prevMode != ShiftMode.CAPS) {
                         Icon.CAPS
                     } else {

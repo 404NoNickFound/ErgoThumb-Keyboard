@@ -1,4 +1,18 @@
 <resources>
+    <string name="tutorial_target_word">case</string>
+    <string name="tutorial_target_phrase">Who wants kiwi and chocolate?</string>
+    <string-array name="section_explains">
+        <item>Here you choose which languages cycle on the keyboard and the UI language.</item>
+        <item>Here you customize the keyboard and app colors (dark and light).</item>
+        <item>Here you adjust height, grid gap, space bar and margins.</item>
+        <item>Here you tune thresholds and sensitivities for gestures, cursor and erase.</item>
+        <item>Here you enable or disable comforts like auto-cap or auto-space.</item>
+        <item>Here you control which animations play and how fast.</item>
+        <item>Here you manage the bigram log (privacy) and advanced options.</item>
+        <item>Here you find the tutorial again and the GitHub link to report bugs.</item>
+    </string-array>
+    <string name="gate_title">Enable the keyboard first</string>
+    <string name="gate_desc">The tutorial (and the keyboard) need you to enable ThumbGridTest in the system keyboard settings. Do it and come back here to continue; the tutorial will unlock itself.</string>
     <string name="app_name">ThumbGridTest</string>
     <string name="subtype_ca">Català</string>
     <string name="subtype_es">Castellano</string>
@@ -15,6 +29,7 @@
     <string name="section_geometry">Size and geometry</string>
     <string name="section_animations">Animations</string>
     <string name="section_advanced">Advanced</string>
+    <string name="section_help">Help</string>
     <string name="app_language">App language</string>
     <string name="lang_ca">Català</string>
     <string name="lang_es">Castellano</string>
@@ -29,6 +44,8 @@
     <string name="slider_margin_right">Right margin</string>
     <string name="slider_margin_bottom">Bottom margin (bar)</string>
     <string name="fmt_percent_height">%1$d%% of the height</string>
+    <string name="slider_spacebar_h">Space bar height (no pill)</string>
+    <string name="fmt_u">%1$d u</string>
     <string name="slider_threshold">Gesture threshold</string>
     <string name="fmt_dp">%1$d dp</string>
     <string name="slider_double">Double-action time</string>
@@ -52,6 +69,7 @@
     <string name="switch_anim_help">Visual help (flash and character substitution)</string>
     <string name="switch_anim_trace">Show gesture trace (guide line)</string>
     <string name="switch_bigrams">Log bigrams to optimize the layout</string>
+    <string name="switch_erase_precision">Improve erase/redo word precision</string>
     <string name="bigrams_empty">Bigram log: empty</string>
     <string name="bigrams_summary">Bigram log: %1$s</string>
     <string name="btn_delete_bigrams">Delete the bigram log</string>
@@ -75,6 +93,50 @@
     <string name="color_default">Default</string>
     <string name="color_save">Save</string>
     <string name="color_custom">Custom color…</string>
-    <string name="slider_spacebar_h">Space bar height (no pill)</string>
-    <string name="fmt_u">%1$d u</string>
+    <string name="help_replay">Replay the tutorial</string>
+    <string name="help_github">GitHub / report bugs</string>
+    <string name="github_not_published">The repository is not published yet. Once it is, this button will take you straight to it.</string>
+    <string name="tutorial_skip">Skip tutorial</string>
+    <string name="tutorial_step_of">Step %1$d of %2$d</string>
+    <string name="tutorial_continue">Continue</string>
+    <string name="tutorial_finish">Finish</string>
+    <string name="sensitivity_note">You can tweak the sensitivity of several things in the Sensitivity section of the settings; no need to go one by one explaining the units.</string>
+    <string-array name="tutorial_text">
+        <item>This is a sample text for the tutorial. You don\'t need to read it: it\'s here so you can try the keyboard\'s functions.</item>
+        <item>This text is exclusive to the tutorial. It lets you try every function on both small segments and a whole paragraph.</item>
+        <item>As you can see, everything is split into small parts. That\'s so it\'s easier to remember which sentence you are erasing or redoing, though it won\'t matter in the sliding section.</item>
+        <item>If you\'re reading this, you\'ve gone further than expected. Most people give up at the second paragraph and start sliding to erase everything, which is exactly what we wanted you to do.</item>
+        <item>This last paragraph is deliberately long so you can try continuous erase by holding your finger at the left edge, and so redo has plenty of work coming back. If you erased and redid all of this without getting lost, you already have more control over the keyboard than most users will ever have, and you didn\'t even have to read a real manual.</item>
+        <item>P.S.: Did you actually read it all, or just skim the end? If you read it all, congratulations: you\'re in the 0.1% of users who read sample texts. The keyboard and I are very proud of you.</item>
+    </string-array>
+    <string-array name="tutorial_titles">
+        <item>Make it yours</item>
+        <item>Tap = big letter</item>
+        <item>Swipe = mini letter</item>
+        <item>Type as usual</item>
+        <item>Erase by segments</item>
+        <item>Redo</item>
+        <item>Continuous erase</item>
+        <item>Capitals</item>
+        <item>Cursor and line break</item>
+        <item>Numbers and pages</item>
+        <item>Symbols</item>
+        <item>Switch language</item>
+        <item>Settings and how to help</item>
+    </string-array>
+    <string-array name="tutorial_descs">
+        <item>Before starting, make the keyboard yours: colors (dark and light), height, gap, bottom margin and capsule languages.</item>
+        <item>Tap the big letters to type them. Type the word CASA using only big letters.</item>
+        <item>Corner mini letters are typed by swiping from the center toward their direction. Type the phrase \"Who wants kiwi and chocolate?\" (the tutorial will verify it). Once you have it, feel free to try other gestures on any letter.</item>
+        <item>Now type any sentence as if nothing. You usually won\'t need gestures: the keyboard is fast even tapping only big letters.</item>
+        <item>Swipe left on the space bar to erase. Erase at least two short sentences of the text.</item>
+        <item>Swipe right on the space bar to redo. Recover at least as much as you erased.</item>
+        <item>Hold your finger at the left edge while sliding to erase continuously. Empty the long paragraph.</item>
+        <item>Two quick up-swipes enable caps lock: type three capitals and disable it with another up-swipe.</item>
+        <item>Drag the round knob to move the cursor to the end of the second paragraph, then swipe down on space to insert a line break.</item>
+        <item>One tap on the round knob opens numbers: type a digit, slide the strip to see more pages and insert the @ from the second one.</item>
+        <item>Two taps on the round knob open the symbol layer: insert a symbol like € or © and close it by tapping abc.</item>
+        <item>Tap the language capsule (bottom left) to switch language, then tap again until you\'re back to yours.</item>
+        <item>Each card below is one settings section. Once the repository is public, the button will take you to GitHub to report bugs.</item>
+    </string-array>
 </resources>

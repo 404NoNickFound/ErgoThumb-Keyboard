@@ -1,4 +1,18 @@
 <resources>
+    <string name="tutorial_target_word">casa</string>
+    <string name="tutorial_target_phrase">Qui vol kiwi i xocolata?</string>
+    <string-array name="section_explains">
+        <item>Aquí tries quins idiomes circularan al teclat i l\'idioma de la interfície.</item>
+        <item>Aquí personalitzes els colors (fosc i clar) del teclat i de l\'app.</item>
+        <item>Aquí ajustes l\'alçada, la separació de graelles, la barra d\'espai i els marges.</item>
+        <item>Aquí regules llindars i sensibilitats de gestos, cursor i esborrat.</item>
+        <item>Aquí actives o desactives comoditats com majúscula o espai automàtics.</item>
+        <item>Aquí controles quines animacions es fan i com de ràpides.</item>
+        <item>Aquí gestiones el registre de bigrams (privadesa) i opcions avançades.</item>
+        <item>Aquí trobes el tutorial de nou i l\'enllaç a GitHub per reportar bugs.</item>
+    </string-array>
+    <string name="gate_title">Activa el teclat primer</string>
+    <string name="gate_desc">El tutorial (i el teclat) necessiten que activis ThumbGridTest als ajustos de teclats del sistema. Fes-ho i torna aquí per continuar; el tutorial es desbloquejarà sol.</string>
     <string name="app_name">ThumbGridTest</string>
     <string name="subtype_ca">Català</string>
     <string name="subtype_es">Castellano</string>
@@ -15,6 +29,7 @@
     <string name="section_geometry">Mida i geometria</string>
     <string name="section_animations">Animacions</string>
     <string name="section_advanced">Avançat</string>
+    <string name="section_help">Ajuda</string>
     <string name="app_language">Idioma de l\'app</string>
     <string name="lang_ca">Català</string>
     <string name="lang_es">Castellano</string>
@@ -29,6 +44,8 @@
     <string name="slider_margin_right">Marge dret</string>
     <string name="slider_margin_bottom">Marge inferior (barra)</string>
     <string name="fmt_percent_height">%1$d%% de l\'alçada</string>
+    <string name="slider_spacebar_h">Alçada de la barra d\'espai (sense pill)</string>
+    <string name="fmt_u">%1$d u</string>
     <string name="slider_threshold">Llindar de gest</string>
     <string name="fmt_dp">%1$d dp</string>
     <string name="slider_double">Temps de doble acció</string>
@@ -52,6 +69,7 @@
     <string name="switch_anim_help">Ajuda visual (flash i substitució de caràcter)</string>
     <string name="switch_anim_trace">Mostra la traça del gest (línia guia)</string>
     <string name="switch_bigrams">Registra bigrams per optimitzar el layout</string>
+    <string name="switch_erase_precision">Millora la precisió d\'esborrar i refer paraules</string>
     <string name="bigrams_empty">Registre de bigrams: buit</string>
     <string name="bigrams_summary">Registre de bigrams: %1$s</string>
     <string name="btn_delete_bigrams">Esborra el registre de bigrams</string>
@@ -75,6 +93,50 @@
     <string name="color_default">Per defecte</string>
     <string name="color_save">Desa</string>
     <string name="color_custom">Color personalitzat…</string>
-    <string name="slider_spacebar_h">Alçada de la barra d\'espai (sense pill)</string>
-    <string name="fmt_u">%1$d u</string>
+    <string name="help_replay">Repetir el tutorial</string>
+    <string name="help_github">GitHub / reportar bugs</string>
+    <string name="github_not_published">El repositori encara no està publicat. Quan ho estigui, aquest botó hi portarà directament.</string>
+    <string name="tutorial_skip">Saltar el tutorial</string>
+    <string name="tutorial_step_of">Pas %1$d de %2$d</string>
+    <string name="tutorial_continue">Continuar</string>
+    <string name="tutorial_finish">Finalitzar</string>
+    <string name="sensitivity_note">Pots ajustar la sensibilitat de diverses coses a l\'apartat Sensibilitat dels ajustos; no cal anar-les una per una explicant les unitats.</string>
+    <string-array name="tutorial_text">
+        <item>Aquest és un text d\'exemple per al tutorial. No cal que el llegeixis: és aquí perquè provis les funcions del teclat.</item>
+        <item>Aquest text és exclusiu del tutorial. Serveix per provar totes les funcions tant en segments petits com en un paràgraf sencer.</item>
+        <item>Com podràs veure, tot està separat en petites parts. Això està fet perquè et resulti més fàcil recordar quina frase estàs esborrant o refent, però no et serà important en l\'apartat de lliscar.</item>
+        <item>Si estàs llegint això, ja has arribat més lluny del que esperaves. La majoria de gent es rendeix al segon paràgraf i comença a lliscar per esborrar-ho tot, que és exactament el que volíem que fessis.</item>
+        <item>Aquest últim paràgraf és deliberadament llarg perquè puguis provar l\'esborrat continu mantenint el dit a la vora esquerra, i perquè el refet tingui prou feina per tornar. Si has esborrat i refet tot això sense perdre\'t, ja tens més control sobre el teclat que la majoria d\'usuaris tindran mai, i ni tan sols has hagut de llegir cap manual de veritat.</item>
+        <item>P.D.: Realment has arribat a llegir-ho tot, o només has mirat el final? Si ho has llegit tot, enhorabona: ets del 0,1% d\'usuaris que llegeixen els textos d\'exemple. El teclat i jo estem molt orgullosos de tu.</item>
+    </string-array>
+    <string-array name="tutorial_titles">
+        <item>Fes-lo teu</item>
+        <item>Tocar = lletra gran</item>
+        <item>Lliscar = minilletra</item>
+        <item>Escriu com sempre</item>
+        <item>Esborrar per segments</item>
+        <item>Refer</item>
+        <item>Esborrat continu</item>
+        <item>Majúscules</item>
+        <item>Cursor i salt de línia</item>
+        <item>Nombres i pàgines</item>
+        <item>Símbols</item>
+        <item>Canvia d\'idioma</item>
+        <item>Ajustos i com ajudar</item>
+    </string-array>
+    <string-array name="tutorial_descs">
+        <item>Abans de començar, deixa el teclat al teu gust: colors (fosc i clar), alçada, separació, marge inferior i idiomes de la càpsula.</item>
+        <item>Toca les lletres grans per escriure-les. Escriu la paraula CASA tocant només lletres grans.</item>
+        <item>Les minilletres dels cantons s\'escriuen lliscant des del centre cap a la seva direcció. Escriu la frase «Qui vol kiwi i xocolata?» (el tutorial la verificarà). Quan la tinguis, pots provar altres gestos en qualsevol lletra sense que passi res.</item>
+        <item>Ara escriu una frase qualsevol com si res. Normalment no et caldran gestos: el teclat és ràpid fins i tot tocant només lletres grans.</item>
+        <item>Llisca cap a l\'esquerra sobre la barra d\'espai per esborrar. Esborra com a mínim dues frases curtes del text.</item>
+        <item>Llisca cap a la dreta sobre la barra d\'espai per refer. Recupera com a mínim el mateix que has esborrat.</item>
+        <item>Mantén el dit a la vora esquerra mentre llisques per esborrar en continu. Buida el paràgraf llarg.</item>
+        <item>Dos lliscaments amunt seguits activen el bloc majúscules: escriu tres majúscules i desactiva\'l amb un altre llisc amunt.</item>
+        <item>Arrossega el botó rodó per portar el cursor al final del segon paràgraf i fes un llisc avall sobre l\'espai per inserir un salt de línia.</item>
+        <item>Un clic al botó rodó obre els nombres: escriu un número, llisca la franja per veure més pàgines i insereix el @ de la segona.</item>
+        <item>Dos clics al botó rodó obren la capa de símbols: insereix un símbol com € o © i tanca-la tocant abc.</item>
+        <item>Toca la càpsula de l\'idioma (a baix a l\'esquerra) per canviar d\'idioma i torna-hi a tocar fins a retornar al teu.</item>
+        <item>Cada targeta d\'aquí sota és un apartat dels ajustos. Quan el repositori sigui públic, el botó et portarà a GitHub per reportar bugs.</item>
+    </string-array>
 </resources>
