@@ -1,4 +1,26 @@
 <resources>
+    <string name="p0a">Set colors, height and languages to your liking, then tap Continue.</string>
+    <string name="p1a">Tap only big letters to type: CASA.</string>
+    <string name="p2a">Swipe from the center of a key toward a corner mini-letter to type it.</string>
+    <string name="p2b">Now type the whole phrase: \"Who wants kiwi and chocolate?\".</string>
+    <string name="p3a">Type any sentence, as you normally would.</string>
+    <string name="p4a">Swipe left over the space to erase.</string>
+    <string name="p5a">Swipe right over the space to redo.</string>
+    <string name="p6a">Hold your finger at the left edge to erase continuously.</string>
+    <string name="p7a">Swipe up twice over the space to enable caps lock.</string>
+    <string name="p7b">Type three capital letters.</string>
+    <string name="p7c">Swipe up once to disable caps lock.</string>
+    <string name="p8a">Drag the round knob to the end of the second paragraph.</string>
+    <string name="p8b">Swipe down over the space to insert a line break.</string>
+    <string name="p9a">Tap the round knob once to open the numbers.</string>
+    <string name="p9b">Tap a number to type it.</string>
+    <string name="p9c">Swipe the strip to change page and tap @.</string>
+    <string name="p10a">Tap the round knob twice to open the symbol layer.</string>
+    <string name="p10b">Tap a symbol (for example €).</string>
+    <string name="p10c">Tap abc to close the symbol layer.</string>
+    <string name="p11a">Tap the capsule to switch language, then again to return to yours.</string>
+    <string name="p12a">Explore the cards: each opens a settings section. When ready, tap Finish.</string>
+    <string name="tutorial_typo">Incorrect letter erased</string>
     <string name="tutorial_target_word">case</string>
     <string name="tutorial_target_phrase">Who wants kiwi and chocolate?</string>
     <string-array name="section_explains">

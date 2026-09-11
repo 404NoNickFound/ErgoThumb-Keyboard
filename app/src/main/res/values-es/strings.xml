@@ -1,4 +1,26 @@
 <resources>
+    <string name="p0a">Ajusta colores, altura e idiomas a tu gusto y toca Continuar.</string>
+    <string name="p1a">Toca solo letras grandes para escribir: CASA.</string>
+    <string name="p2a">Desliza desde el centro de una tecla hacia una miniletra de la esquina para escribirla.</string>
+    <string name="p2b">Ahora escribe la frase entera: «¿Quién quiere kiwi y chocolate?».</string>
+    <string name="p3a">Escribe una frase cualquiera, como harías normalmente.</string>
+    <string name="p4a">Desliza hacia la izquierda sobre el espacio para borrar.</string>
+    <string name="p5a">Desliza hacia la derecha sobre el espacio para rehacer.</string>
+    <string name="p6a">Mantén el dedo en el borde izquierdo para borrar en continuo.</string>
+    <string name="p7a">Haz dos deslizamientos arriba sobre el espacio para activar el bloque mayúsculas.</string>
+    <string name="p7b">Escribe tres letras mayúsculas.</string>
+    <string name="p7c">Haz un deslizamiento arriba para desactivar el bloque mayúsculas.</string>
+    <string name="p8a">Arrastra el botón redondo hasta el final del segundo párrafo.</string>
+    <string name="p8b">Desliza abajo sobre el espacio para insertar un salto de línea.</string>
+    <string name="p9a">Toca una vez el botón redondo para abrir los números.</string>
+    <string name="p9b">Toca un número para escribirlo.</string>
+    <string name="p9c">Desliza sobre la franja para cambiar de página y toca @.</string>
+    <string name="p10a">Toca dos veces el botón redondo para abrir la capa de símbolos.</string>
+    <string name="p10b">Toca un símbolo (por ejemplo €).</string>
+    <string name="p10c">Toca abc para cerrar la capa de símbolos.</string>
+    <string name="p11a">Toca la cápsula para cambiar de idioma y otra vez para volver al tuyo.</string>
+    <string name="p12a">Explora las tarjetas: cada una abre un apartado de los ajustes. Cuando quieras, toca Finalizar.</string>
+    <string name="tutorial_typo">Letra incorrecta borrada</string>
     <string name="tutorial_target_word">casa</string>
     <string name="tutorial_target_phrase">¿Quién quiere kiwi y chocolate?</string>
     <string-array name="section_explains">

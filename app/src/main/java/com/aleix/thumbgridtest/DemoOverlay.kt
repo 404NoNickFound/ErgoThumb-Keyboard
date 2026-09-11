@@ -12,7 +12,7 @@ import kotlin.math.sin
 class DemoOverlay(context: Context) : View(context) {
 
     var grid: DualGridView? = null
-    private var step = -1
+    private var demo = -1
     private var startMs = 0L
 
     private val dot = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; alpha = 170 }
@@ -21,12 +21,12 @@ class DemoOverlay(context: Context) : View(context) {
         strokeWidth = 8f; color = Color.WHITE; alpha = 90
     }
 
-    private val segMs = 700L    // durada d'un segment de lliscada
-    private val tapMs = 450L    // durada d'un tap (dit a sota)
-    private val liftMs = 400L   // dit aixecat entre traços: no es dibuixa RES
+    private val segMs = 700L
+    private val tapMs = 450L
+    private val liftMs = 400L
 
-    fun setStep(s: Int) {
-        step = s
+    fun setDemo(d: Int) {
+        demo = d
         startMs = SystemClock.uptimeMillis()
         invalidate()
     }
@@ -34,24 +34,20 @@ class DemoOverlay(context: Context) : View(context) {
     private fun c(side: Int, r: Int, col: Int): RectF? = grid?.demoCell(side, r, col)
     private fun center(r: RectF): FloatArray = floatArrayOf(r.centerX(), r.centerY())
 
-    // Cada pas = llista de traços; cada traç = llista de punts recorreguts amb el dit A SOTA.
-    private fun strokesFor(step: Int): List<List<FloatArray>> {
+    private fun strokesFor(d: Int): List<List<FloatArray>> {
         val g = grid ?: return emptyList()
-        return when (step) {
-            // "casa": quatre taps separats
+        return when (d) {
             1 -> listOfNotNull(
                 c(0, 1, 2)?.let { listOf(center(it)) },
                 c(1, 1, 0)?.let { listOf(center(it)) },
                 c(0, 1, 1)?.let { listOf(center(it)) },
                 c(1, 1, 0)?.let { listOf(center(it)) }
             )
-            // lliscar sobre la S cap a la Q
             2 -> {
                 val s = c(0, 1, 1) ?: return emptyList()
                 val f = center(s)
                 listOf(listOf(f, floatArrayOf(f[0] + s.width() * 0.45f, f[1])))
             }
-            // Esborrar: COMENÇA SOBRE l'espai i llisca esquerra
             4 -> {
                 val p = g.demoPill() ?: return emptyList()
                 listOf(listOf(
@@ -59,7 +55,6 @@ class DemoOverlay(context: Context) : View(context) {
                     floatArrayOf(p.centerX() - 0.25f, p.centerY())
                 ))
             }
-            // Refer: COMENÇA SOBRE l'espai i llisca dreta
             5 -> {
                 val p = g.demoPill() ?: return emptyList()
                 listOf(listOf(
@@ -67,19 +62,14 @@ class DemoOverlay(context: Context) : View(context) {
                     floatArrayOf(p.centerX() + 0.25f, p.centerY())
                 ))
             }
-            // Mantenir a la vora: viatge des de l'espai fins a la vora + manteniment
             6 -> {
                 val p = g.demoPill() ?: return emptyList()
-                val ex = 0.015f
-                val ey = p.centerY()
+                val ex = 0.015f; val ey = p.centerY()
                 listOf(listOf(
                     floatArrayOf(p.centerX(), ey),
-                    floatArrayOf(ex, ey),
-                    floatArrayOf(ex, ey),
-                    floatArrayOf(ex, ey)
+                    floatArrayOf(ex, ey), floatArrayOf(ex, ey), floatArrayOf(ex, ey)
                 ))
             }
-            // doble llisc amunt
             7 -> {
                 val p = g.demoPill() ?: return emptyList()
                 val cx = p.centerX(); val cy = p.centerY()
@@ -88,48 +78,47 @@ class DemoOverlay(context: Context) : View(context) {
                     listOf(floatArrayOf(cx, cy), floatArrayOf(cx, cy - 0.12f))
                 )
             }
-            // arrossegar knob + llisc avall
-            8 -> {
-                val k = g.demoKnob() ?: return emptyList()
+            73 -> {
                 val p = g.demoPill() ?: return emptyList()
-                listOf(
-                    listOf(floatArrayOf(k[0], k[1]), floatArrayOf(k[0] - 0.18f, k[1])),
-                    listOf(floatArrayOf(p.centerX(), p.centerY()),
-                        floatArrayOf(p.centerX(), p.centerY() + 0.06f))
-                )
+                listOf(listOf(
+                    floatArrayOf(p.centerX(), p.centerY()),
+                    floatArrayOf(p.centerX(), p.centerY() - 0.12f)
+                ))
             }
-            // 1 clic al knob + lliscar la franja CAP A L'ESQUERRA (pàgina següent)
-            9 -> {
+            81 -> {
                 val k = g.demoKnob() ?: return emptyList()
+                listOf(listOf(floatArrayOf(k[0], k[1]), floatArrayOf(k[0] - 0.18f, k[1])))
+            }
+            82 -> {
+                val p = g.demoPill() ?: return emptyList()
+                listOf(listOf(
+                    floatArrayOf(p.centerX(), p.centerY()),
+                    floatArrayOf(p.centerX(), p.centerY() + 0.06f)
+                ))
+            }
+            91 -> { val k = g.demoKnob() ?: return emptyList(); listOf(listOf(k)) }
+            92 -> {
                 val sy = g.demoStripY()
-                listOf(
-                    listOf(floatArrayOf(k[0], k[1])),
-                    listOf(floatArrayOf(0.62f, sy), floatArrayOf(0.30f, sy))
-                )
+                listOf(listOf(floatArrayOf(0.62f, sy), floatArrayOf(0.30f, sy)))
             }
-            // doble clic al knob + tap a un símbol
-            10 -> {
+            101 -> {
                 val k = g.demoKnob() ?: return emptyList()
-                listOf(
-                    listOf(floatArrayOf(k[0], k[1])),
-                    listOf(floatArrayOf(k[0], k[1])),
-                    listOf(floatArrayOf(0.5f, 0.40f))
-                )
+                listOf(listOf(k), listOf(k))
             }
-            // càpsula d'idioma
+            102 -> listOf(listOf(floatArrayOf(0.5f, 0.40f)))
             11 -> g.demoCapsule()?.let { listOf(listOf(it)) } ?: emptyList()
             else -> emptyList()
         }
     }
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        val strokes = strokesFor(step)
+        val strokes = strokesFor(demo)
         if (strokes.isEmpty() || width == 0 || height == 0) return
         val r = width * 0.035f
         val durs = strokes.map { if (it.size == 1) tapMs else segMs * (it.size - 1) }
         val cycle = durs.sum() + liftMs * strokes.size
         val t = (SystemClock.uptimeMillis() - startMs) % cycle
-
         var acc = 0L
         for (i in strokes.indices) {
             val d = durs[i]
@@ -138,7 +127,7 @@ class DemoOverlay(context: Context) : View(context) {
                 invalidate()
                 return
             }
-            acc += d + liftMs   // finestra de "dit aixecat": no dibuixem res
+            acc += d + liftMs
         }
         invalidate()
     }

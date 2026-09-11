@@ -3,6 +3,9 @@ package com.aleix.thumbgridtest
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.view.View
 import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import android.widget.FrameLayout
@@ -31,16 +34,22 @@ class TutorialActivity : AppCompatActivity() {
     private lateinit var cardScroll: ScrollView
     private lateinit var actionBtn: MaterialButton
     private lateinit var skipBtn: MaterialButton
+    private lateinit var transitionTv: TextView
 
+    private val handler = Handler(Looper.getMainLooper())
     private var midH = 0
-
+    private var kbH = 0
+    private lateinit var gridWrap: FrameLayout
     private var titles: Array<String> = emptyArray()
-    private var descs: Array<String> = emptyArray()
     private var sampleText = ""
     private var gateActive = false
+    private var transitioning = false
     private var step = 0
+    private var phase = 0
 
     private var anyCommits = 0
+    private var tapCommits = 0
+    private var gestCommits = 0
     private var deletes = 0
     private var deletesAtStep = 0
     private var redos = 0
@@ -48,9 +57,14 @@ class TutorialActivity : AppCompatActivity() {
     private var enterDone = false
     private var pageChanged = false
     private var langCycles = 0
+    private var barOpen = false
+    private var symOpen = false
+    private var capsOnState = false
 
     private val writingSteps = setOf(1, 2, 3, 7, 9, 10, 11)
     private val manipSteps = setOf(4, 5, 6, 8)
+
+    private data class Phase(val textRes: Int, val demo: Int, val validate: () -> Boolean)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -63,14 +77,12 @@ class TutorialActivity : AppCompatActivity() {
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
 
         titles = resources.getStringArray(R.array.tutorial_titles)
-        descs = resources.getStringArray(R.array.tutorial_descs)
         sampleText = resources.getStringArray(R.array.tutorial_text).joinToString("\n\n")
 
-        // Alçades en píxels, sense pesos: impossibles de col·lapsar.
         val screenH = resources.displayMetrics.heightPixels
         val density = resources.displayMetrics.density
         val topH = (56 * density).toInt()
-        val kbH = (screenH * Prefs.height(this)).toInt()
+        kbH = (screenH * Prefs.height(this)).toInt()
         midH = (screenH - topH - kbH).coerceAtLeast((120 * density).toInt())
 
         val root = LinearLayout(this).apply {
@@ -99,8 +111,6 @@ class TutorialActivity : AppCompatActivity() {
         topBar.addView(skipBtn)
 
         cardScroll = ScrollView(this).apply {
-            // Failsafe: per defecte ocupa TOT el mig; si el repartiment es perdés,
-            // la targeta continua visible i el teclat continua a sota.
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, midH
             )
@@ -134,10 +144,10 @@ class TutorialActivity : AppCompatActivity() {
             setPadding(24, 16, 24, 16)
             gravity = android.view.Gravity.TOP
             showSoftInputOnFocus = false
-            visibility = android.view.View.GONE
+            visibility = View.GONE
         }
 
-        val gridWrap = FrameLayout(this).apply {
+        gridWrap = FrameLayout(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
@@ -183,9 +193,23 @@ class TutorialActivity : AppCompatActivity() {
                 FrameLayout.LayoutParams.MATCH_PARENT
             )
         }
+        transitionTv = TextView(this).apply {
+            textSize = 26f
+            setTextColor(Color.WHITE)
+            setBackgroundColor(0xCC000000.toInt())
+            setPadding(48, 28, 48, 28)
+            gravity = android.view.Gravity.CENTER
+            visibility = View.GONE
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                android.view.Gravity.CENTER
+            )
+        }
         overlay.grid = grid
         gridWrap.addView(grid)
         gridWrap.addView(overlay)
+        gridWrap.addView(transitionTv)
 
         root.addView(topBar)
         root.addView(cardScroll)
@@ -196,18 +220,18 @@ class TutorialActivity : AppCompatActivity() {
         (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager)
             .hideSoftInputFromWindow(editor.windowToken, 0)
 
-        if (imeEnabled()) showStep() else showGate()
+        if (imeEnabled()) showPhase() else showGate()
     }
 
     override fun onResume() {
         super.onResume()
         if (gateActive && imeEnabled()) {
             gateActive = false
-            showStep()
+            showPhase()
         }
     }
 
-    private fun setH(v: android.view.View, h: Int) {
+    private fun setH(v: View, h: Int) {
         val lp = v.layoutParams
         lp.height = h
         v.layoutParams = lp
@@ -220,121 +244,211 @@ class TutorialActivity : AppCompatActivity() {
 
     private fun showGate() {
         gateActive = true
-        skipBtn.visibility = android.view.View.GONE
+        skipBtn.visibility = View.GONE
+        transitionTv.visibility = View.GONE
         stepTv.text = ""
         titleTv.text = getString(R.string.gate_title)
         descTv.text = getString(R.string.gate_desc)
         clearExtraPanels()
-        editor.visibility = android.view.View.GONE
+        editor.visibility = View.GONE
         setH(cardScroll, midH)
-        overlay.setStep(-1)
-        actionBtn.visibility = android.view.View.VISIBLE
+        overlay.setDemo(-1)
+        actionBtn.visibility = View.VISIBLE
         actionBtn.text = getString(R.string.btn_system_settings)
         actionBtn.setOnClickListener {
             startActivity(Intent(android.provider.Settings.ACTION_INPUT_METHOD_SETTINGS))
         }
     }
 
-    private fun onGridEvent(ev: String) {
-        when (ev) {
-            "delete" -> deletes++
-            "redo" -> redos++
-            "enter" -> enterDone = true
-            "cursor" -> cursorMoved = true
-            "barpage" -> pageChanged = true
-            "lang" -> langCycles++
-        }
-        if (ev.startsWith("commit")) anyCommits++
-        checkStep()
-    }
-
     private fun norm() = (editor.text?.toString() ?: "").lowercase().trim()
 
-    private fun checkStep() {
-        if (gateActive) return
+    private fun phasesFor(current: Int): List<Phase> {
         val raw = editor.text?.toString() ?: ""
-        val ok = when (step) {
-            1 -> norm().contains(getString(R.string.tutorial_target_word).lowercase())
-            2 -> norm().contains(getString(R.string.tutorial_target_phrase).lowercase())
-            3 -> anyCommits >= 8
-            4 -> deletes >= 8
-            5 -> redos >= 8
-            6 -> (deletes - deletesAtStep) >= 30
-            7 -> raw.count { it.isUpperCase() } >= 3
-            8 -> cursorMoved && enterDone
-            9 -> pageChanged && raw.any { it.isDigit() } && raw.contains("@")
-            10 -> raw.any { !it.isLetterOrDigit() && !it.isWhitespace() && it != '@' }
-            11 -> langCycles >= 2
-            else -> false
+        return when (current) {
+            0 -> listOf(Phase(R.string.p0a, -1) { false })
+            1 -> listOf(Phase(R.string.p1a, 1) {
+                norm().contains(getString(R.string.tutorial_target_word).lowercase())
+            })
+            2 -> listOf(
+                Phase(R.string.p2a, 2) { gestCommits >= 1 },
+                Phase(R.string.p2b, -1) {
+                    norm().contains(getString(R.string.tutorial_target_phrase).lowercase())
+                }
+            )
+            3 -> listOf(Phase(R.string.p3a, -1) { anyCommits >= 8 })
+            4 -> listOf(Phase(R.string.p4a, 4) { deletes >= 8 })
+            5 -> listOf(Phase(R.string.p5a, 5) { redos >= 8 })
+            6 -> listOf(Phase(R.string.p6a, 6) { (deletes - deletesAtStep) >= 30 })
+            7 -> listOf(
+                Phase(R.string.p7a, 7) { capsOnState },
+                Phase(R.string.p7b, -1) { raw.count { it.isUpperCase() } >= 3 },
+                Phase(R.string.p7c, 73) { !capsOnState }
+            )
+            8 -> listOf(
+                Phase(R.string.p8a, 81) { cursorMoved },
+                Phase(R.string.p8b, 82) { enterDone }
+            )
+            9 -> listOf(
+                Phase(R.string.p9a, 91) { barOpen },
+                Phase(R.string.p9b, -1) { raw.any { it.isDigit() } },
+                Phase(R.string.p9c, 92) { pageChanged && raw.contains("@") }
+            )
+            10 -> listOf(
+                Phase(R.string.p10a, 101) { symOpen },
+                Phase(R.string.p10b, 102) {
+                    raw.any { !it.isLetterOrDigit() && !it.isWhitespace() && it != '@' }
+                },
+                Phase(R.string.p10c, -1) { !symOpen }
+            )
+            11 -> listOf(Phase(R.string.p11a, 11) { langCycles >= 2 })
+            else -> listOf(Phase(R.string.p12a, -1) { false })
         }
-        if (ok) next()
     }
 
-    private fun next() {
-        step++
-        resetCounters()
+    private fun onGridEvent(ev: String) {
         when {
-            step == 4 || step == 8 -> {
-                editor.setText(sampleText)
-                editor.setSelection(editor.text?.length ?: 0)
+            ev.startsWith("commit:") -> {
+                val ch = ev.removePrefix("commit:").firstOrNull() ?: return
+                anyCommits++
+                if (ch in tapSet) tapCommits++ else gestCommits++
+                fixTypo()
             }
-            step in writingSteps -> editor.setText("")
+            ev == "delete" -> deletes++
+            ev == "redo" -> redos++
+            ev == "enter" -> enterDone = true
+            ev == "cursor" -> cursorMoved = true
+            ev == "barpage" -> pageChanged = true
+            ev == "bar" -> barOpen = true
+            ev == "symopen" -> symOpen = true
+            ev == "symclose" -> symOpen = false
+            ev == "capsOn" -> capsOnState = true
+            ev == "capsOff" -> capsOnState = false
+            ev == "lang" -> langCycles++
         }
-        showStep()
+        checkProgress()
+    }
+    private fun fixTypo() {
+        if (gateActive || transitioning) return
+        if (step != 1 && step != 2) return
+        val target = when (step) {
+            1 -> getString(R.string.tutorial_target_word).lowercase()
+            else -> getString(R.string.tutorial_target_phrase).lowercase()
+        }
+        val e = editor.text ?: return
+        var removed = 0
+        while (e.isNotEmpty() && removed < 6 && !target.startsWith(e.toString().lowercase())) {
+            e.delete(e.length - 1, e.length)
+            removed++
+        }
+        if (removed > 0) {
+            transitionTv.text = getString(R.string.tutorial_typo)
+            transitionTv.visibility = View.VISIBLE
+            handler.postDelayed({
+                if (!transitioning) transitionTv.visibility = View.GONE
+            }, 700)
+        }
+    }
+
+    private val tapSet = setOf(
+        'L', 'T', 'D', 'M', 'S', 'C', 'F', 'N', 'R',
+        'I', 'O', 'P', 'A', 'E', 'V', 'G', 'U', 'B'
+    )
+
+    private fun checkProgress() {
+        if (gateActive || transitioning) return
+        if (step == 0 || step == titles.size - 1) return
+        val ph = phasesFor(step)
+        val cur = ph.getOrElse(phase) { return }
+        if (!cur.validate()) return
+        if (phase < ph.size - 1) {
+            phase++
+            showPhase()
+        } else {
+            advanceStep()
+        }
+    }
+
+    private fun advanceStep() {
+        transitioning = true
+        transitionTv.text = "✓  " + titles.getOrElse(step) { "" }
+        transitionTv.visibility = View.VISIBLE
+        handler.postDelayed({
+            transitionTv.visibility = View.GONE
+            transitioning = false
+            step++
+            phase = 0
+            resetCounters()
+            when {
+                step == 4 || step == 8 -> {
+                    editor.setText(sampleText)
+                    editor.setSelection(editor.text?.length ?: 0)
+                }
+                step in writingSteps -> editor.setText("")
+            }
+            showPhase()
+        }, 900)
     }
 
     private fun resetCounters() {
-        anyCommits = 0
+        anyCommits = 0; tapCommits = 0; gestCommits = 0
         deletes = 0; deletesAtStep = 0; redos = 0
         cursorMoved = false; enterDone = false
         pageChanged = false; langCycles = 0
+        barOpen = false; symOpen = false; capsOnState = false
     }
 
-    private fun showStep() {
-        skipBtn.visibility = android.view.View.VISIBLE
-        stepTv.text = getString(R.string.tutorial_step_of, step + 1, titles.size)
+    private fun showPhase() {
+        skipBtn.visibility = View.VISIBLE
+        val ph = phasesFor(step)
+        val cur = ph.getOrElse(phase) { ph[0] }
+        stepTv.text = getString(R.string.tutorial_step_of, step + 1, titles.size) +
+                "  ·  " + (phase + 1) + "/" + ph.size
         titleTv.text = titles.getOrElse(step) { "" }
-        descTv.text = descs.getOrElse(step) { "" }
+        descTv.text = getString(cur.textRes)
+        overlay.setDemo(cur.demo)
         clearExtraPanels()
 
+        val hideGrid = (step == 0 || step == titles.size - 1)
+        gridWrap.visibility = if (hideGrid) View.GONE else View.VISIBLE
+        if (step == 2 && phase == 1) editor.setText("")
         val showEditor = step in writingSteps || step in manipSteps
-        editor.visibility = if (showEditor) android.view.View.VISIBLE else android.view.View.GONE
-        if (showEditor) {
-            val c = (midH * 0.60f).toInt()
-            setH(cardScroll, c)
-            setH(editor, midH - c)
-            editor.requestFocus()
-        } else {
-            setH(cardScroll, midH)
+        editor.visibility = if (showEditor) View.VISIBLE else View.GONE
+        when {
+            hideGrid -> setH(cardScroll, midH + kbH)
+            showEditor -> {
+                val c = (midH * 0.60f).toInt()
+                setH(cardScroll, c)
+                setH(editor, midH - c)
+                editor.requestFocus()
+            }
+            else -> setH(cardScroll, midH)
         }
-
-        overlay.setStep(step)
 
         when (step) {
             0 -> {
                 buildVisualPanel()
-                actionBtn.visibility = android.view.View.VISIBLE
+                actionBtn.visibility = View.VISIBLE
                 actionBtn.text = getString(R.string.tutorial_continue)
-                actionBtn.setOnClickListener { next() }
+                actionBtn.setOnClickListener { advanceStep() }
             }
             titles.size - 1 -> {
                 buildTourPanel()
-                actionBtn.visibility = android.view.View.VISIBLE
+                actionBtn.visibility = View.VISIBLE
                 actionBtn.text = getString(R.string.tutorial_finish)
                 actionBtn.setOnClickListener { finishTutorial() }
             }
-            else -> actionBtn.visibility = android.view.View.GONE
+            else -> actionBtn.visibility = View.GONE
         }
     }
 
-    private var extraViews = mutableListOf<android.view.View>()
+    private var extraViews = mutableListOf<View>()
 
     private fun clearExtraPanels() {
         extraViews.forEach { panel.removeView(it) }
         extraViews.clear()
     }
 
-    private fun addExtra(v: android.view.View) {
+    private fun addExtra(v: View) {
         extraViews.add(v)
         panel.addView(v, panel.indexOfChild(actionBtn))
     }
@@ -447,7 +561,7 @@ class TutorialActivity : AppCompatActivity() {
         val current = if (isDark) Prefs.colorDark(this) else Prefs.colorLight(this)
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         for (c in swatchColors) {
-            row.addView(android.view.View(this).apply {
+            row.addView(View(this).apply {
                 layoutParams = LinearLayout.LayoutParams(80, 80).apply { marginEnd = 12 }
                 setBackgroundColor(if (c == 0) 0xFF8E8E93.toInt() else c)
                 alpha = if (c == current) 1.0f else 0.45f

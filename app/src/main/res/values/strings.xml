@@ -1,6 +1,28 @@
 <resources>
+    <string name="p0a">Ajusta colors, alçada i idiomes al teu gust i toca Continuar.</string>
+    <string name="p1a">Toca només lletres grans per escriure: CASA.</string>
+    <string name="p2a">Llisca des del centre d\'una tecla cap a una minilletra del cantó per escriure-la.</string>
+    <string name="p2b">Ara escriu la frase sencera: «Qui vol kiwi i xocolata?».</string>
+    <string name="p3a">Escriu una frase qualsevol, com faries normalment.</string>
+    <string name="p4a">Llisca cap a l\'esquerra sobre l\'espai per esborrar.</string>
+    <string name="p5a">Llisca cap a la dreta sobre l\'espai per refer.</string>
+    <string name="p6a">Mantén el dit a la vora esquerra per esborrar en continu.</string>
+    <string name="p7a">Fes dos lliscaments amunt sobre l\'espai per activar el bloc majúscules.</string>
+    <string name="p7b">Escriu tres lletres majúscules.</string>
+    <string name="p7c">Fes un lliscament amunt per desactivar el bloc majúscules.</string>
+    <string name="p8a">Arrossega el botó rodó fins al final del segon paràgraf.</string>
+    <string name="p8b">Llisca avall sobre l\'espai per inserir un salt de línia.</string>
+    <string name="p9a">Toca un cop el botó rodó per obrir els nombres.</string>
+    <string name="p9b">Toca un nombre per escriure\'l.</string>
+    <string name="p9c">Llisca sobre la franja per canviar de pàgina i toca @.</string>
+    <string name="p10a">Toca dos cops el botó rodó per obrir la capa de símbols.</string>
+    <string name="p10b">Toca un símbol (per exemple €).</string>
+    <string name="p10c">Toca abc per tancar la capa de símbols.</string>
+    <string name="p11a">Toca la càpsula per canviar d\'idioma i un altre cop per tornar al teu.</string>
+    <string name="p12a">Explora les targetes: cada una obre un apartat dels ajustos. Quan vulguis, toca Finalitzar.</string>
     <string name="tutorial_target_word">casa</string>
     <string name="tutorial_target_phrase">Qui vol kiwi i xocolata?</string>
+    <string name="tutorial_typo">Lletra incorrecta esborrada</string>
     <string-array name="section_explains">
         <item>Aquí tries quins idiomes circularan al teclat i l\'idioma de la interfície.</item>
         <item>Aquí personalitzes els colors (fosc i clar) del teclat i de l\'app.</item>

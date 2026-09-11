@@ -2416,6 +2416,7 @@ class DualGridView(context: Context) : View(context) {
                     val blocked = autoSpace && b.length == 2 && b[1] == ' ' && b[0] in autoSpaceChars
                     if (!blocked) {
                         textTarget?.commit(" ")
+                        tutEvent?.invoke("commit: ")
                         undoStack.clear()
                         spawnFeedback(null, 0, 0, true, "␣")
                     }
