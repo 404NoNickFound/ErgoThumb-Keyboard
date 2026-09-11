@@ -26,7 +26,6 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
-import android.view.inputmethod.InputMethodSubtype
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -873,6 +872,10 @@ class ThumbImeService : InputMethodService() {
 
     private var gridView: DualGridView? = null
 
+    // Nota: a MIUI, Settings.Secure.selected_input_method_subtype no es pot canviar
+    // des d'un IME de tercers (el seu servei aplica criteri per locale del sistema).
+    // Aquesta crida és correcta i funciona a AOSP i altres capes; al MIUI només
+    // afecta el comportament intern, no l'etiqueta del selector.
     @SuppressLint("MissingPermission")
     private fun publishSubtype() {
         try {
@@ -890,10 +893,6 @@ class ThumbImeService : InputMethodService() {
             Log.e("ThumbGrid", "publishSubtype error", e)
         }
     }
-    // Nota: a MIUI, Settings.Secure.selected_input_method_subtype no es pot canviar
-    // des d'un IME de tercers (el seu servei aplica criteri per locale del sistema).
-    // Aquesta crida és correcta i funciona a AOSP i altres capes; al MIUI només
-    // afecta el comportament intern, no l'etiqueta del selector.
 
     override fun onCreateInputView(): View {
         val view = DualGridView(this)
@@ -1003,7 +1002,7 @@ class DualGridView(context: Context) : View(context) {
     var onLangChanged: (() -> Unit)? = null
 
     private enum class GridSide { LEFT, RIGHT }
-    private enum class Zone { LEFT, RIGHT, SPACE, BAR, SLIDER, CAPSULE }
+    private enum class Zone { LEFT, RIGHT, SPACE, BAR, SLIDER, CAPSULE, SYMBOL }
     private enum class ShiftMode { OFF, ONCE, CAPS }
     private enum class Icon { SHIFT, CAPS, ENTER, BACK, REDO }
 
@@ -1014,6 +1013,15 @@ class DualGridView(context: Context) : View(context) {
     )
 
     private val autoSpaceChars = ".?!,;:"
+
+    private var symbolLayer = false
+
+    private val symbolRows = listOf(
+        listOf("$", "€", "¥", "¢", "©", "®", "™", "~", "¿"),
+        listOf("[", "]", "{", "}", "<", ">", "^", "¡", "°"),
+        listOf("123", "`", ";", "÷", "\\", "|", "¦", "¬", "BACK"),
+        listOf("ABC", "SPACE", "SPACE", "×", "§", "¶", "+", "=", "ENTER")
+    )
 
     private data class PointerState(
         val pointerId: Int,
@@ -1561,6 +1569,52 @@ class DualGridView(context: Context) : View(context) {
         else 1f - cubicOut(t01(p.release, dur(100), now))
     }
 
+    private fun drawSymbolLayer(canvas: Canvas, g: Geo) {
+        val area = RectF(g.contentLeft, g.gridTop, g.contentLeft + g.contentWidth, g.capsuleTop)
+        keycapPaint.color = theme.role[Themes.BG]
+        canvas.drawRect(area, keycapPaint)
+        val gapU = g.gapU
+        val colW = (area.width() - 10 * gapU) / 9f
+        val rowH = (area.height() - 5 * gapU) / 4f
+        val radius = px(12f)
+        val yC = -(textPaint.descent() + textPaint.ascent()) / 2f
+        for (r in 0..3) {
+            for (c in 0..8) {
+                val sym = symbolRows[r][c]
+                if (sym == "SPACE" && c == 2) continue
+                val span = if (sym == "SPACE") 2 else 1
+                val x = area.left + gapU + c * (colW + gapU)
+                val y = area.top + gapU + r * (rowH + gapU)
+                val w = colW * span + gapU * (span - 1)
+                val rect = RectF(x, y, x + w, y + rowH)
+                keycapPaint.color = theme.role[Themes.KEYCAP]
+                canvas.drawRoundRect(rect, radius, radius, keycapPaint)
+                when (sym) {
+                    "BACK" -> drawIcon(canvas, Icon.BACK, rect.centerX(), rect.centerY(), px(22f))
+                    "ENTER" -> drawIcon(canvas, Icon.ENTER, rect.centerX(), rect.centerY(), px(22f))
+                    "SPACE" -> {
+                        hintPaint.color = theme.hint
+                        hintPaint.textSize = px(16f)
+                        hintPaint.typeface = fontRegular
+                        canvas.drawText("␣", rect.centerX(), rect.centerY() + yC, hintPaint)
+                    }
+                    "123", "ABC" -> {
+                        textPaint.color = theme.text
+                        textPaint.textSize = px(16f)
+                        textPaint.typeface = fontMedium
+                        canvas.drawText(sym.lowercase(), rect.centerX(), rect.centerY() + yC, textPaint)
+                    }
+                    else -> {
+                        textPaint.color = theme.text
+                        textPaint.textSize = px(20f)
+                        textPaint.typeface = fontMedium
+                        canvas.drawText(sym, rect.centerX(), rect.centerY() + yC, textPaint)
+                    }
+                }
+            }
+        }
+    }
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         if (width == 0 || height == 0) return
@@ -1925,6 +1979,8 @@ class DualGridView(context: Context) : View(context) {
             }
         }
 
+        if (symbolLayer) drawSymbolLayer(canvas, g)
+
         if (caseAnimStart >= 0L && caseT >= 1f) caseAnimStart = -1L
         if (anyAnimActive(now)) kickAnim()
     }
@@ -1953,7 +2009,16 @@ class DualGridView(context: Context) : View(context) {
                 val kd = knobD(g)
                 val kcx = knobCenterX(g) + knobP * knobTravel(g)
                 val leftEdge = g.leftOrigin + 3 * g.colW + 2 * g.gapU
-                when {
+                if (symbolLayer && y >= g.gridTop && y <= g.capsuleTop &&
+                    x >= g.contentLeft && x <= g.contentLeft + g.contentWidth
+                ) {
+                    zone = Zone.SYMBOL
+                    val colW4 = (g.contentWidth - 10 * g.gapU) / 9f
+                    val rowH4 = (g.capsuleTop - g.gridTop - 5 * g.gapU) / 4f
+                    val c4 = ((x - g.contentLeft - g.gapU) / (colW4 + g.gapU)).toInt().coerceIn(0, 8)
+                    val r4 = ((y - g.gridTop - g.gapU) / (rowH4 + g.gapU)).toInt().coerceIn(0, 3)
+                    cellIndex = r4 * 16 + c4
+                } else when {
                     barP > 0.5f && y < g.gridTop -> {
                         zone = Zone.BAR
                         cellIndex = ((x - g.contentLeft) / (g.contentWidth / 10f))
@@ -2120,13 +2185,13 @@ class DualGridView(context: Context) : View(context) {
     private fun toggleBar() {
         val now = SystemClock.uptimeMillis()
         if (now - lastCenterTapTime < doubleWindowMs.toLong()) {
-            barVisible = true
-            barPage = 1
             lastCenterTapTime = 0L
+            symbolLayer = !symbolLayer
+            barVisible = false
         } else {
+            lastCenterTapTime = now
             barVisible = !barVisible
             barPage = 0
-            lastCenterTapTime = now
         }
         barTarget = if (barVisible) 1f else 0f
         barAnimFrom = barP
@@ -2142,6 +2207,32 @@ class DualGridView(context: Context) : View(context) {
         val dir = if (distance < swipeThreshold) SwipeDir.TAP else directionFrom(dx, dy)
 
         when (state.zone) {
+            Zone.SYMBOL -> {
+                if (dir != SwipeDir.TAP) return
+                val r = state.cellIndex / 16
+                val c = state.cellIndex % 16
+                val sym = symbolRows.getOrNull(r)?.getOrNull(c) ?: return
+                when (sym) {
+                    "123" -> {
+                        barVisible = true
+                        barPage = 0
+                        barTarget = 1f
+                        barAnimFrom = barP
+                        barAnimStart = SystemClock.uptimeMillis()
+                        if (!animStrong) barP = 1f
+                        kickAnim()
+                    }
+                    "ABC" -> { symbolLayer = false; kickAnim() }
+                    "SPACE" -> { textTarget?.commit(" "); undoStack.clear() }
+                    "BACK" -> {
+                        val ch = textTarget?.deleteBefore() ?: ""
+                        if (ch.isNotEmpty()) undoStack.addLast(ch)
+                    }
+                    "ENTER" -> { textTarget?.enter(); undoStack.clear() }
+                    else -> commitChar(sym)
+                }
+            }
+
             Zone.BAR -> {
                 if (dir == SwipeDir.TAP) {
                     commitChar(barPages[barPage][state.cellIndex])
