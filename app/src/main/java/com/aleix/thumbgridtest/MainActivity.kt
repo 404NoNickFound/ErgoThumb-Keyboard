@@ -1479,12 +1479,16 @@ class DualGridView(context: Context) : View(context) {
             val tok = currentToken()
             if (tok.length < 2) emptyList() else {
                 val low = tok.lowercase()
-                when {
-                    learned.containsKey(low) -> listOf(learned[low]!!)
-                    SpellEngine.isWord(low) ->
-                        SpellEngine.accentBetter(low)?.let { listOf(it) } ?: emptyList()
-                    else -> SpellEngine.candidates(tok, 3)
+                val list = ArrayList<String>(3)
+                learned[low]?.let { list.add(it) }
+                SpellEngine.accentBetter(low)?.let { if (!list.contains(it)) list.add(it) }
+                if (list.size < 3) {
+                    for (c in SpellEngine.candidates(tok, 3)) {
+                        if (!list.contains(c)) list.add(c)
+                        if (list.size >= 3) break
+                    }
                 }
+                list
             }
         }
         if (correctorOn)
