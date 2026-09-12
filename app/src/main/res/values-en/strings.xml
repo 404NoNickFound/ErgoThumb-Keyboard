@@ -1,6 +1,7 @@
 <resources>
     <string name="p0a">Set colors, height and languages to your liking, then tap Continue.</string>
-    <string name="p1a">Tap only big letters to type: CASA.</string>
+    <string name="p1a">Tap only big letters to type: %1$s.</string>
+    <string name="tutorial_target_word">paste</string>
     <string name="p2a">Swipe from the center of a key toward a corner mini-letter to type it.</string>
     <string name="p2b">Now type the whole phrase: \"Who wants kiwi and chocolate?\".</string>
     <string name="p3a">Type any sentence, as you normally would.</string>
@@ -21,7 +22,6 @@
     <string name="p11a">Tap the capsule to switch language, then again to return to yours.</string>
     <string name="p12a">Explore the cards: each opens a settings section. When ready, tap Finish.</string>
     <string name="tutorial_typo">Incorrect letter erased</string>
-    <string name="tutorial_target_word">case</string>
     <string name="tutorial_target_phrase">Who wants kiwi and chocolate?</string>
     <string-array name="section_explains">
         <item>Here you choose which languages cycle on the keyboard and the UI language.</item>

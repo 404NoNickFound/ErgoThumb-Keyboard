@@ -1,6 +1,6 @@
 <resources>
     <string name="p0a">Ajusta colors, alçada i idiomes al teu gust i toca Continuar.</string>
-    <string name="p1a">Toca només lletres grans per escriure: CASA.</string>
+    <string name="p1a">Toca només lletres grans per escriure: %1$s.</string>
     <string name="p2a">Llisca des del centre d\'una tecla cap a una minilletra del cantó per escriure-la.</string>
     <string name="p2b">Ara escriu la frase sencera: «Qui vol kiwi i xocolata?».</string>
     <string name="p3a">Escriu una frase qualsevol, com faries normalment.</string>

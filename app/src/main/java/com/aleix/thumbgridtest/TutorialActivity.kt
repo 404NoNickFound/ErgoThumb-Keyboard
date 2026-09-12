@@ -310,7 +310,7 @@ class TutorialActivity : AppCompatActivity() {
             ev.startsWith("commit:") -> {
                 val ch = ev.removePrefix("commit:").firstOrNull() ?: return
                 anyCommits++
-                if (ch in tapSet) tapCommits++ else gestCommits++
+                if (ch.uppercaseChar() in tapSet) tapCommits++ else gestCommits++
                 fixTypo()
             }
             ev == "delete" -> deletes++
@@ -404,7 +404,9 @@ class TutorialActivity : AppCompatActivity() {
         stepTv.text = getString(R.string.tutorial_step_of, step + 1, titles.size) +
                 "  ·  " + (phase + 1) + "/" + ph.size
         titleTv.text = titles.getOrElse(step) { "" }
-        descTv.text = getString(cur.textRes)
+        descTv.text = if (cur.textRes == R.string.p1a)
+            getString(R.string.p1a, getString(R.string.tutorial_target_word).uppercase())
+        else getString(cur.textRes)
         overlay.setDemo(cur.demo)
         clearExtraPanels()
 
