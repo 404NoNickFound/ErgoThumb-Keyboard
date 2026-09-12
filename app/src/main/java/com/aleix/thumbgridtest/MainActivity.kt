@@ -1703,6 +1703,19 @@ class DualGridView(context: Context) : View(context) {
         val g = geo()
         return (g.stripH / 2f) / height.coerceAtLeast(1)
     }
+    fun demoCellForChar(ch: Char): RectF? {
+        if (width == 0 || height == 0) return null
+        val g = geo()
+        for (side in listOf(GridSide.LEFT, GridSide.RIGHT)) {
+            for (row in 0..2) for (col in 0..2) {
+                if (keyAt(side, row, col).tap.equals(ch.toString(), ignoreCase = true)) {
+                    val r = cellRect(g, side, row, col)
+                    return RectF(r.left / width, r.top / height, r.right / width, r.bottom / height)
+                }
+            }
+        }
+        return null
+    }
     private fun drawSymbolLayer(canvas: Canvas, g: Geo) {
         val area = RectF(g.contentLeft, g.gridTop, g.contentLeft + g.contentWidth, g.capsuleTop)
         keycapPaint.color = theme.role[Themes.BG]

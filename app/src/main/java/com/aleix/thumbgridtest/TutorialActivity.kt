@@ -407,6 +407,7 @@ class TutorialActivity : AppCompatActivity() {
         descTv.text = if (cur.textRes == R.string.p1a)
             getString(R.string.p1a, getString(R.string.tutorial_target_word).uppercase())
         else getString(cur.textRes)
+        overlay.targetWord = getString(R.string.tutorial_target_word)
         overlay.setDemo(cur.demo)
         clearExtraPanels()
 

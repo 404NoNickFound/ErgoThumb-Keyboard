@@ -12,6 +12,7 @@ import kotlin.math.sin
 class DemoOverlay(context: Context) : View(context) {
 
     var grid: DualGridView? = null
+    var targetWord: String = ""
     private var demo = -1
     private var startMs = 0L
 
@@ -37,12 +38,9 @@ class DemoOverlay(context: Context) : View(context) {
     private fun strokesFor(d: Int): List<List<FloatArray>> {
         val g = grid ?: return emptyList()
         return when (d) {
-            1 -> listOfNotNull(
-                c(0, 1, 2)?.let { listOf(center(it)) },
-                c(1, 1, 0)?.let { listOf(center(it)) },
-                c(0, 1, 1)?.let { listOf(center(it)) },
-                c(1, 1, 0)?.let { listOf(center(it)) }
-            )
+            1 -> targetWord.uppercase().mapNotNull { ch ->
+                grid?.demoCellForChar(ch)?.let { listOf(center(it)) }
+            }
             2 -> {
                 val s = c(0, 1, 1) ?: return emptyList()
                 val f = center(s)
