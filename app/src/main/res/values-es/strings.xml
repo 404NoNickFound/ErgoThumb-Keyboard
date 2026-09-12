@@ -1,4 +1,16 @@
 <resources>
+    <string name="section_corrector">Corrector</string>
+    <string name="switch_corrector">Activa el corrector ortográfico</string>
+    <string name="switch_autocorrect_space">Autocorrección al tocar el espacio</string>
+    <string name="slider_confidence">Confianza mínima para autocorregir</string>
+    <string name="switch_undo_correction">Al borrar tras una autocorrección, borra toda la palabra</string>
+    <string name="btn_blacklist">Palabras sin autocorrección</string>
+    <string name="blacklist_title">Palabras que nunca se autocregirán</string>
+    <string name="blacklist_hint">Separadas por comas</string>
+    <string name="corrector_warning_title">Antes de activar el corrector</string>
+    <string name="corrector_warning_body">El corrector lee el texto que escribes para ofrecer sugerencias. Todo se procesa en el dispositivo: no se envía a ningún sitio ni queda registrado (a diferencia de los bigrams).</string>
+    <string name="corrector_warning_ok">Entendido, activa el corrector</string>
+    <string name="no_suggestions">No hay sugerencias disponibles</string>
     <string name="p0a">Ajusta colores, altura e idiomas a tu gusto y toca Continuar.</string>
     <string name="p1a">Toca solo letras grandes para escribir: %1$s.</string>
     <string name="p2a">Desliza desde el centro de una tecla hacia una miniletra de la esquina para escribirla.</string>

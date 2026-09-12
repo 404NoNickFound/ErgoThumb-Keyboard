@@ -79,6 +79,16 @@ object Prefs {
     const val KEY_VMAX = "vmax_cps"
     const val KEY_CASE_MS = "case_ms"
 
+    // --- Corrector (C1) ---
+    const val KEY_CORRECTOR = "corrector_enabled"
+    const val KEY_CORRECTOR_WARNED = "corrector_warned"
+    const val KEY_AUTOCORRECT_SPACE = "autocorrect_space"
+    const val KEY_CONFIDENCE = "confidence"
+    const val KEY_UNDO_WHOLE = "undo_whole_correction"
+    const val KEY_BLACKLIST = "autocorrect_blacklist"
+    const val KEY_LEARNED = "learned_corrections"
+    const val DEFAULT_CONFIDENCE = 80f
+
     const val DEFAULT_HEIGHT = 0.35f
     const val DEFAULT_GAP = 0.10f
     const val DEFAULT_THRESHOLD_DP = 24f
@@ -92,6 +102,7 @@ object Prefs {
     const val DEFAULT_VMAX = 20f
     const val DEFAULT_CASE_MS = 260f
     const val DEFAULT_SPACEBAR_H = 56f
+
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences(NAME, Context.MODE_PRIVATE)
 
@@ -133,6 +144,33 @@ object Prefs {
     fun animScale(ctx: Context) = prefs(ctx).getFloat(KEY_ANIM_SCALE, DEFAULT_ANIM_SCALE)
     fun vmax(ctx: Context) = prefs(ctx).getFloat(KEY_VMAX, DEFAULT_VMAX)
     fun caseMs(ctx: Context) = prefs(ctx).getFloat(KEY_CASE_MS, DEFAULT_CASE_MS)
+
+    // --- Corrector (C1) ---
+    fun corrector(ctx: Context) = prefs(ctx).getBoolean(KEY_CORRECTOR, false)
+    fun correctorWarned(ctx: Context) = prefs(ctx).getBoolean(KEY_CORRECTOR_WARNED, false)
+    fun autocorrectSpace(ctx: Context) = prefs(ctx).getBoolean(KEY_AUTOCORRECT_SPACE, true)
+    fun confidence(ctx: Context) = prefs(ctx).getFloat(KEY_CONFIDENCE, DEFAULT_CONFIDENCE)
+    fun undoWhole(ctx: Context) = prefs(ctx).getBoolean(KEY_UNDO_WHOLE, true)
+    fun blacklist(ctx: Context): Set<String> =
+        (prefs(ctx).getString(KEY_BLACKLIST, "") ?: "")
+            .split(",").map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+    fun learned(ctx: Context): Map<String, String> {
+        val raw = prefs(ctx).getString(KEY_LEARNED, "") ?: ""
+        if (raw.isEmpty()) return emptyMap()
+        return raw.split(",").mapNotNull { pair ->
+            val idx = pair.indexOf('>')
+            if (idx <= 0) null else pair.substring(0, idx) to pair.substring(idx + 1)
+        }.toMap()
+    }
+
+    fun putLearned(ctx: Context, from: String, to: String) {
+        val m = learned(ctx).toMutableMap()
+        m[from] = to
+        prefs(ctx).edit().putString(
+            KEY_LEARNED,
+            m.entries.joinToString(",") { e -> e.key + ">" + e.value }
+        ).apply()
+    }
 
     fun langs(ctx: Context): List<String> =
         (prefs(ctx).getString(KEY_LANGS, "ca,es,en") ?: "ca,es,en")
@@ -395,20 +433,6 @@ class MainActivity : AppCompatActivity() {
 
 class SettingsActivity : AppCompatActivity() {
 
-    private val reqUnlock = 1234
-    private lateinit var root: LinearLayout
-    private lateinit var currentContainer: LinearLayout
-    private var accent = 0
-    private var poleCol = Color.BLACK
-
-    private val swatches = listOf(
-        0,
-        0xFF4C86C8.toInt(),
-        0xFF5BA85A.toInt(),
-        0xFF9A6BB8.toInt(),
-        0xFFD08A3E.toInt(),
-        0xFFC45252.toInt()
-    )
     companion object {
         const val EXTRA_FOCUS = "focus_section"
         val SECTION_KEYS = listOf(
@@ -423,9 +447,24 @@ class SettingsActivity : AppCompatActivity() {
         )
     }
 
+    private val reqUnlock = 1234
+    private lateinit var root: LinearLayout
+    private lateinit var currentContainer: LinearLayout
     private lateinit var scroll: ScrollView
+    private var accent = 0
+    private var poleCol = Color.BLACK
     private val sectionHeaders = mutableListOf<TextView>()
     private val sectionContainers = mutableListOf<LinearLayout>()
+    private lateinit var corrSw: MaterialSwitch
+
+    private val swatches = listOf(
+        0,
+        0xFF4C86C8.toInt(),
+        0xFF5BA85A.toInt(),
+        0xFF9A6BB8.toInt(),
+        0xFFD08A3E.toInt(),
+        0xFFC45252.toInt()
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -536,6 +575,32 @@ class SettingsActivity : AppCompatActivity() {
             setOnClickListener { openGithub() }
         })
 
+        // --- Corrector (C1): al final per no desindexar el tour/focus ---
+        section(R.string.section_corrector)
+        corrSw = mSwitch(R.string.switch_corrector, Prefs.corrector(this)) { v ->
+            if (v) {
+                if (!Prefs.correctorWarned(this)) {
+                    corrSw.isChecked = false
+                    showCorrectorWarning {
+                        putB(Prefs.KEY_CORRECTOR_WARNED, true)
+                        putB(Prefs.KEY_CORRECTOR, true)
+                        corrSw.isChecked = true
+                    }
+                } else putB(Prefs.KEY_CORRECTOR, true)
+            } else putB(Prefs.KEY_CORRECTOR, false)
+        }
+        mSwitch(R.string.switch_autocorrect_space, Prefs.autocorrectSpace(this))
+        { putB(Prefs.KEY_AUTOCORRECT_SPACE, it) }
+        mSlider(R.string.slider_confidence, 0f, 100f, Prefs.confidence(this),
+            { getString(R.string.fmt_percent, it.toInt()) })
+        { v -> putF(Prefs.KEY_CONFIDENCE, v) }
+        mSwitch(R.string.switch_undo_correction, Prefs.undoWhole(this))
+        { putB(Prefs.KEY_UNDO_WHOLE, it) }
+        add(MaterialButton(this).apply {
+            text = getString(R.string.btn_blacklist)
+            setOnClickListener { showBlacklist() }
+        })
+
         root.addView(TextView(this).apply {
             text = getString(R.string.settings_note)
             textSize = 13f
@@ -551,6 +616,7 @@ class SettingsActivity : AppCompatActivity() {
             if (v is LinearLayout) for (i in 0 until v.childCount) tintAll(v.getChildAt(i))
         }
         tintAll(root)
+
         val focus = intent.getStringExtra(EXTRA_FOCUS)
         if (focus != null) {
             val idx = SECTION_KEYS.indexOf(focus)
@@ -568,6 +634,7 @@ class SettingsActivity : AppCompatActivity() {
                 }
             }
         }
+
         setContentView(scroll)
     }
 
@@ -905,6 +972,37 @@ class SettingsActivity : AppCompatActivity() {
         handler.postDelayed(tick, 1000L)
     }
 
+    private fun showCorrectorWarning(onAccept: () -> Unit) {
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.corrector_warning_title))
+            .setMessage(getString(R.string.corrector_warning_body))
+            .setCancelable(false)
+            .setNegativeButton(getString(R.string.bigrams_warning_cancel), null)
+            .setPositiveButton(getString(R.string.corrector_warning_ok)) { _, _ -> onAccept() }
+            .show()
+    }
+
+    private fun showBlacklist() {
+        val prefs = getSharedPreferences(Prefs.NAME, MODE_PRIVATE)
+        val input = android.widget.EditText(this).apply {
+            setText(Prefs.blacklist(this@SettingsActivity).joinToString(", "))
+            setTextColor(Color.WHITE)
+        }
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.blacklist_title))
+            .setMessage(getString(R.string.blacklist_hint))
+            .setView(input)
+            .setNegativeButton(getString(R.string.close), null)
+            .setPositiveButton(getString(R.string.color_save)) { _, _ ->
+                prefs.edit().putString(
+                    Prefs.KEY_BLACKLIST,
+                    input.text.toString().split(",").map { it.trim() }
+                        .filter { it.isNotEmpty() }.joinToString(",")
+                ).apply()
+            }
+            .show()
+    }
+
     @Deprecated("API antiga però suficient per al prototip.")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
@@ -1075,7 +1173,7 @@ class DualGridView(context: Context) : View(context) {
     var tutEvent: ((String) -> Unit)? = null
 
     private enum class GridSide { LEFT, RIGHT }
-    private enum class Zone { LEFT, RIGHT, SPACE, BAR, SLIDER, CAPSULE, SYMBOL }
+    private enum class Zone { LEFT, RIGHT, SPACE, BAR, SLIDER, CAPSULE, SYMBOL, SUGGEST }
     private enum class ShiftMode { OFF, ONCE, CAPS }
     private enum class Icon { SHIFT, CAPS, ENTER, BACK, REDO }
 
@@ -1175,6 +1273,25 @@ class DualGridView(context: Context) : View(context) {
 
     private var erasePauseUntil = 0L
 
+    // --- Corrector (C1) ---
+    private var suggestions: List<String> = emptyList()
+    private var pendingUndoLen = 0
+    private var correctorOn = Prefs.corrector(context)
+    private var autocorrectSpace = Prefs.autocorrectSpace(context)
+    private var confidenceMin = Prefs.confidence(context)
+    private var undoWhole = Prefs.undoWhole(context)
+    private var blacklist = Prefs.blacklist(context)
+    private var learned = Prefs.learned(context)
+    private var locContext: Context = context
+
+    private fun refreshLocContext() {
+        val conf = resources.configuration
+        conf.setLocale(java.util.Locale.forLanguageTag(lang))
+        locContext = context.createConfigurationContext(conf)
+    }
+
+    private fun locStr(res: Int): String = locContext.getString(res)
+
     private var heightFraction = Prefs.height(context)
     private var gapFraction = Prefs.gap(context)
     private var swipeThreshold = Prefs.threshold(context) * resources.displayMetrics.density
@@ -1250,6 +1367,16 @@ class DualGridView(context: Context) : View(context) {
         lang = Prefs.lang(context)
         layout = Layouts.forLang(lang)
         theme = Themes.current(context)
+        // --- Corrector (C1) ---
+        correctorOn = Prefs.corrector(context)
+        autocorrectSpace = Prefs.autocorrectSpace(context)
+        confidenceMin = Prefs.confidence(context)
+        undoWhole = Prefs.undoWhole(context)
+        blacklist = Prefs.blacklist(context)
+        learned = Prefs.learned(context)
+        learned = Prefs.learned(context)
+        SpellEngine.load(context, lang)
+        refreshSuggestions()
         scale = (resources.displayMetrics.widthPixels /
                 resources.displayMetrics.density) / 430f
         requestLayout()
@@ -1338,6 +1465,96 @@ class DualGridView(context: Context) : View(context) {
 
     private fun erasePaused() = SystemClock.uptimeMillis() < erasePauseUntil
 
+    // --- Corrector (C1): token actual, suggeriments, autocorrecció i esborrat per paraula ---
+    private fun currentToken(): String {
+        val before = textTarget?.peekBefore(64) ?: return ""
+        val delims = " \n\t.,;:!?()\"'«»"
+        var idx = -1
+        for (i in before.indices) if (before[i] in delims) idx = i
+        return if (idx < 0) before else before.substring(idx + 1)
+    }
+
+    private fun refreshSuggestions() {
+        suggestions = if (!correctorOn) emptyList() else {
+            val tok = currentToken()
+            if (tok.length < 2) emptyList() else {
+                val low = tok.lowercase()
+                when {
+                    learned.containsKey(low) -> listOf(learned[low]!!)
+                    SpellEngine.isWord(low) ->
+                        SpellEngine.accentBetter(low)?.let { listOf(it) } ?: emptyList()
+                    else -> SpellEngine.candidates(tok, 3)
+                }
+            }
+        }
+        if (correctorOn)
+            Log.d("ThumbGrid", "sugg tok='${currentToken()}' n=${suggestions.size} dict=${SpellEngine.size()}")
+    }
+
+    private fun applySuggestion(word: String) {
+        val token = currentToken()
+        if (token.isEmpty()) return
+        Prefs.putLearned(context, token.lowercase(), word.lowercase())
+        learned = Prefs.learned(context)
+        repeat(token.length) { textTarget?.deleteBefore() }
+        val formatted = if (token[0].isUpperCase())
+            word.replaceFirstChar { it.uppercase() } else word
+        textTarget?.commit(formatted)
+        undoStack.clear()
+        pendingUndoLen = 0
+        refreshSuggestions()
+        invalidate()
+    }
+
+    private fun maybeAutocorrect() {
+        if (!correctorOn || !autocorrectSpace) return
+        val tok = currentToken()
+        if (tok.length < 2) return
+        val low = tok.lowercase()
+        if (blacklist.contains(low)) return
+        val learnedTarget = learned[low]
+        if (learnedTarget != null) {
+            replaceToken(tok, learnedTarget)
+            return
+        }
+        val top: String = if (SpellEngine.isWord(low)) {
+            SpellEngine.accentBetter(low) ?: return
+        } else {
+            val c = SpellEngine.candidates(tok, 1).firstOrNull() ?: return
+            if (c == low) return
+            c
+        }
+        if (SpellEngine.confidence(top) * 100f < confidenceMin) return
+        replaceToken(tok, top)
+    }
+
+    private fun replaceToken(tok: String, target: String) {
+        repeat(tok.length) { textTarget?.deleteBefore() }
+        val formatted = if (tok[0].isUpperCase())
+            target.replaceFirstChar { it.uppercase() } else target
+        textTarget?.commit(formatted)
+        undoStack.clear()
+        pendingUndoLen = formatted.length + 1
+    }
+
+    private fun deleteOneUnit(): String {
+        if (pendingUndoLen > 0 && undoWhole) {
+            val sb = StringBuilder()
+            repeat(pendingUndoLen) {
+                val ch = textTarget?.deleteBefore() ?: ""
+                if (ch.isEmpty()) return@repeat
+                sb.insert(0, ch)
+            }
+            pendingUndoLen = 0
+            val whole = sb.toString()
+            if (whole.isNotEmpty()) undoStack.addLast(whole)
+            return whole
+        }
+        val ch = textTarget?.deleteBefore() ?: ""
+        if (ch.isNotEmpty()) undoStack.addLast(ch)
+        return ch
+    }
+
     private data class Geo(
         val stripH: Float, val sliderZone: Float,
         val sliderTop: Float, val sliderH: Float,
@@ -1347,7 +1564,8 @@ class DualGridView(context: Context) : View(context) {
         val leftOrigin: Float, val rightOrigin: Float,
         val contentLeft: Float, val contentWidth: Float,
         val capsuleTop: Float, val capsuleH: Float,
-        val pillRect: RectF, val conventional: Boolean
+        val pillRect: RectF, val conventional: Boolean,
+        val sugH: Float, val suggestRect: RectF
     )
 
     private fun geo(): Geo {
@@ -1355,9 +1573,11 @@ class DualGridView(context: Context) : View(context) {
         val stripH = px(48f)
         val sliderZone = px(64f)
         val sliderH = px(32f)
+        val sugH = px(36f)
         val bottomExtra = height * (marginBottomPct / 100f)
         val zoneTop = height - bottomExtra - sliderZone
-        val gridTop = barP * stripH
+        val topH = sugH + (stripH - sugH) * barP
+        val gridTop = topH
         val contentLeft = width * (marginLeftPct / 100f)
         val contentWidth = width - contentLeft - width * (marginRightPct / 100f)
         val avail = contentWidth - 2 * padH
@@ -1381,9 +1601,10 @@ class DualGridView(context: Context) : View(context) {
         val sliderTop = zoneTop + (sliderZone - sliderH) / 2f
         val capsuleH = (sliderZone - sliderH) / 2f
         val capsuleTop = zoneTop
+        val suggestRect = RectF(contentLeft, 0f, contentLeft + contentWidth, topH)
         return Geo(stripH, sliderZone, sliderTop, sliderH, gridTop, rowH, colW, gapU,
             padH, padV, leftOrigin, rightOrigin, contentLeft, contentWidth,
-            capsuleTop, capsuleH, pillRect, conventional)
+            capsuleTop, capsuleH, pillRect, conventional, sugH, suggestRect)
     }
 
     private fun cellRect(g: Geo, side: GridSide, row: Int, col: Int): RectF {
@@ -1452,6 +1673,7 @@ class DualGridView(context: Context) : View(context) {
             lastLetter = null
         }
         tutEvent?.invoke("commit:$out")
+        refreshSuggestions()
         invalidate()
         return out
     }
@@ -1477,10 +1699,10 @@ class DualGridView(context: Context) : View(context) {
                     return
                 }
                 if (leftward) {
-                    val ch = textTarget?.deleteBefore() ?: ""
+                    val ch = deleteOneUnit()
                     if (ch.isNotEmpty()) {
-                        undoStack.addLast(ch); s.deleted++
-                        tutEvent?.invoke("delete"); noteBoundary(ch)
+                        s.deleted++
+                        tutEvent?.invoke("delete"); noteBoundary(ch.last().toString())
                     }
                 } else {
                     val ch = undoStack.removeLastOrNull()
@@ -1515,6 +1737,7 @@ class DualGridView(context: Context) : View(context) {
         textTarget?.moveCursor(n, cursorWord)
         tickOffset += n * px(12f)
         tutEvent?.invoke("cursor")
+        refreshSuggestions()
     }
 
     private val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -1677,6 +1900,20 @@ class DualGridView(context: Context) : View(context) {
         return RectF(r.left / width, r.top / height, r.right / width, r.bottom / height)
     }
 
+    fun demoCellForChar(ch: Char): RectF? {
+        if (width == 0 || height == 0) return null
+        val g = geo()
+        for (side in listOf(GridSide.LEFT, GridSide.RIGHT)) {
+            for (row in 0..2) for (col in 0..2) {
+                if (keyAt(side, row, col).tap.equals(ch.toString(), ignoreCase = true)) {
+                    val r = cellRect(g, side, row, col)
+                    return RectF(r.left / width, r.top / height, r.right / width, r.bottom / height)
+                }
+            }
+        }
+        return null
+    }
+
     fun demoPill(): RectF? {
         if (width == 0 || height == 0) return null
         val g = geo()
@@ -1703,19 +1940,7 @@ class DualGridView(context: Context) : View(context) {
         val g = geo()
         return (g.stripH / 2f) / height.coerceAtLeast(1)
     }
-    fun demoCellForChar(ch: Char): RectF? {
-        if (width == 0 || height == 0) return null
-        val g = geo()
-        for (side in listOf(GridSide.LEFT, GridSide.RIGHT)) {
-            for (row in 0..2) for (col in 0..2) {
-                if (keyAt(side, row, col).tap.equals(ch.toString(), ignoreCase = true)) {
-                    val r = cellRect(g, side, row, col)
-                    return RectF(r.left / width, r.top / height, r.right / width, r.bottom / height)
-                }
-            }
-        }
-        return null
-    }
+
     private fun drawSymbolLayer(canvas: Canvas, g: Geo) {
         val area = RectF(g.contentLeft, g.gridTop, g.contentLeft + g.contentWidth, g.capsuleTop)
         keycapPaint.color = theme.role[Themes.BG]
@@ -1802,12 +2027,10 @@ class DualGridView(context: Context) : View(context) {
 
         canvas.drawColor(theme.role[Themes.BG])
 
-        if (barP > 0.001f) {
-            canvas.save()
-            canvas.clipRect(0f, 0f, width.toFloat(), g.stripH)
-            canvas.translate(0f, (1f - barP) * g.stripH)
-            canvas.drawRect(0f, 0f, width.toFloat(), g.stripH,
-                keycapPaint.apply { color = theme.role[Themes.STRIP] })
+        val topRect = g.suggestRect
+        keycapPaint.color = theme.role[Themes.STRIP]
+        canvas.drawRect(topRect, keycapPaint)
+        if (barP > 0.5f) {
             val cw = g.contentWidth / 10f
             val page = barPages[barPage]
             textPaint.color = theme.text
@@ -1816,17 +2039,47 @@ class DualGridView(context: Context) : View(context) {
             val yC = -(textPaint.descent() + textPaint.ascent()) / 2f
             for (i in 0..9) {
                 canvas.drawText(page[i], g.contentLeft + i * cw + cw / 2f,
-                    g.stripH / 2f + yC, textPaint)
+                    topRect.centerY() + yC, textPaint)
             }
             hintPaint.color = theme.hint
             hintPaint.textSize = px(10f)
             for (p in barPages.indices) {
                 val dotX = g.contentLeft + g.contentWidth / 2f + (p - 1) * px(14f)
                 hintPaint.alpha = if (p == barPage) 255 else 120
-                canvas.drawText("•", dotX, g.stripH - px(6f), hintPaint)
+                canvas.drawText("•", dotX, topRect.bottom - px(6f), hintPaint)
             }
             hintPaint.alpha = 255
-            canvas.restore()
+        } else if (suggestions.isEmpty()) {
+            hintPaint.color = theme.hint
+            hintPaint.textSize = px(12f)
+            hintPaint.typeface = fontRegular
+            val syC = -(hintPaint.descent() + hintPaint.ascent()) / 2f
+            canvas.drawText(locStr(R.string.no_suggestions),
+                topRect.centerX(), topRect.centerY() + syC, hintPaint)
+        } else {
+            val third = topRect.width() / 3f
+            for (i in 0..2) {
+                val candIdx = when (i) { 0 -> 1; 1 -> 0; else -> 2 }
+                val word = suggestions.getOrElse(candIdx) { "" }
+                if (word.isEmpty()) continue
+                val cx = topRect.left + third * i + third / 2f
+                if (i == 1) {
+                    keycapPaint.color = blendColor(theme.role[Themes.STRIP], theme.flashPole, 0.15f)
+                    canvas.drawRoundRect(
+                        RectF(topRect.left + third + px(4f), topRect.top + px(4f),
+                            topRect.left + 2 * third - px(4f), topRect.bottom - px(4f)),
+                        px(10f), px(10f), keycapPaint)
+                    textPaint.textSize = px(16f)
+                    textPaint.typeface = fontSemiBold
+                    textPaint.color = theme.text
+                } else {
+                    textPaint.textSize = px(13f)
+                    textPaint.typeface = fontRegular
+                    textPaint.color = theme.hint
+                }
+                val yC = -(textPaint.descent() + textPaint.ascent()) / 2f
+                canvas.drawText(word, cx, topRect.centerY() + yC, textPaint)
+            }
         }
 
         fun dimFor(r: RectF): Float {
@@ -2166,11 +2419,19 @@ class DualGridView(context: Context) : View(context) {
                     val r4 = ((y - g.gridTop - g.gapU) / (rowH4 + g.gapU)).toInt().coerceIn(0, 3)
                     cellIndex = r4 * 16 + c4
                 } else when {
-                    barP > 0.5f && y < g.gridTop -> {
-                        zone = Zone.BAR
-                        cellIndex = ((x - g.contentLeft) / (g.contentWidth / 10f))
-                            .toInt().coerceIn(0, 9)
+                    y < g.suggestRect.height() && x >= g.contentLeft &&
+                            x <= g.contentLeft + g.contentWidth -> {
+                        if (barP > 0.5f) {
+                            zone = Zone.BAR
+                            cellIndex = ((x - g.contentLeft) / (g.contentWidth / 10f))
+                                .toInt().coerceIn(0, 9)
+                        } else {
+                            zone = Zone.SUGGEST
+                            cellIndex = ((x - g.contentLeft) / (g.contentWidth / 3f))
+                                .toInt().coerceIn(0, 2)
+                        }
                     }
+
                     y >= g.capsuleTop - capExtra && y <= g.capsuleTop + g.capsuleH + capExtra &&
                             x >= g.contentLeft && x <= g.contentLeft + px(8f) + capW + capExtra -> {
                         zone = Zone.CAPSULE
@@ -2362,6 +2623,13 @@ class DualGridView(context: Context) : View(context) {
         val dir = if (distance < swipeThreshold) SwipeDir.TAP else directionFrom(dx, dy)
 
         when (state.zone) {
+            Zone.SUGGEST -> {
+                if (dir != SwipeDir.TAP) return
+                val candIdx = when (state.cellIndex) { 0 -> 1; 1 -> 0; else -> 2 }
+                val word = suggestions.getOrElse(candIdx) { "" }
+                if (word.isNotEmpty()) applySuggestion(word)
+            }
+
             Zone.SYMBOL -> {
                 if (dir != SwipeDir.TAP) return
                 val r = state.cellIndex / 16
@@ -2425,6 +2693,7 @@ class DualGridView(context: Context) : View(context) {
 
             Zone.SPACE -> when (dir) {
                 SwipeDir.TAP -> {
+                    maybeAutocorrect()
                     val b = textTarget?.peekBefore(2) ?: ""
                     val blocked = autoSpace && b.length == 2 && b[1] == ' ' && b[0] in autoSpaceChars
                     if (!blocked) {
@@ -2436,11 +2705,10 @@ class DualGridView(context: Context) : View(context) {
                 }
                 SwipeDir.W -> {
                     if (state.deleted == 0 && state.redone == 0) {
-                        val ch = textTarget?.deleteBefore() ?: ""
+                        val ch = deleteOneUnit()
                         if (ch.isNotEmpty()) {
-                            undoStack.addLast(ch)
                             tutEvent?.invoke("delete")
-                            noteBoundary(ch)
+                            noteBoundary(ch.last().toString())
                         }
                     }
                     slides.add(GlyphSlide(Icon.BACK, dir, SystemClock.uptimeMillis()))
@@ -2502,6 +2770,7 @@ class DualGridView(context: Context) : View(context) {
                 }
             }
         }
+        refreshSuggestions()
     }
 
     private fun directionFrom(dx: Float, dy: Float): SwipeDir {

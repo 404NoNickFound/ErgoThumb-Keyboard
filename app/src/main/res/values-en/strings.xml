@@ -1,4 +1,16 @@
 <resources>
+    <string name="section_corrector">Corrector</string>
+    <string name="switch_corrector">Enable spell corrector</string>
+    <string name="switch_autocorrect_space">Autocorrect on space tap</string>
+    <string name="slider_confidence">Minimum confidence to autocorrect</string>
+    <string name="switch_undo_correction">After an autocorrect, backspace removes the whole word</string>
+    <string name="btn_blacklist">Words never autocorrected</string>
+    <string name="blacklist_title">Words that are never autocorrected</string>
+    <string name="blacklist_hint">Comma separated</string>
+    <string name="corrector_warning_title">Before enabling the corrector</string>
+    <string name="corrector_warning_body">The corrector reads the text you type to offer suggestions. Everything is processed on-device: nothing is sent anywhere or logged (unlike bigrams).</string>
+    <string name="corrector_warning_ok">Understood, enable the corrector</string>
+    <string name="no_suggestions">No suggestions available</string>
     <string name="p0a">Set colors, height and languages to your liking, then tap Continue.</string>
     <string name="p1a">Tap only big letters to type: %1$s.</string>
     <string name="tutorial_target_word">paste</string>

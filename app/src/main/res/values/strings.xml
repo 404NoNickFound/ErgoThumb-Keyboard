@@ -1,4 +1,16 @@
 <resources>
+    <string name="section_corrector">Corrector</string>
+    <string name="switch_corrector">Activa el corrector ortogràfic</string>
+    <string name="switch_autocorrect_space">Autocorrecció en tocar l\'espai</string>
+    <string name="slider_confidence">Confiança mínima per autocorregir</string>
+    <string name="switch_undo_correction">En esborrar després d\'una autocorrecció, esborra tota la paraula</string>
+    <string name="btn_blacklist">Paraules sense autocorrecció</string>
+    <string name="blacklist_title">Paraules que mai s\'autocorregiran</string>
+    <string name="blacklist_hint">Separades per comes</string>
+    <string name="corrector_warning_title">Abans d\'activar el corrector</string>
+    <string name="corrector_warning_body">El corrector llegeix el text que escrius per oferir suggeriments. Tot es processa al dispositiu: no s\'envia enlloc ni queda registrat (a diferència dels bigrams).</string>
+    <string name="corrector_warning_ok">Entesos, activa el corrector</string>
+    <string name="no_suggestions">No hi ha suggeriments disponibles</string>
     <string name="p0a">Ajusta colors, alçada i idiomes al teu gust i toca Continuar.</string>
     <string name="p1a">Toca només lletres grans per escriure: %1$s.</string>
     <string name="p2a">Llisca des del centre d\'una tecla cap a una minilletra del cantó per escriure-la.</string>
