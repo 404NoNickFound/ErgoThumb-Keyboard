@@ -87,6 +87,7 @@ object Prefs {
     const val KEY_UNDO_WHOLE = "undo_whole_correction"
     const val KEY_BLACKLIST = "autocorrect_blacklist"
     const val KEY_LEARNED = "learned_corrections"
+    const val KEY_PERSONAL = "personal_dict"
     const val DEFAULT_CONFIDENCE = 80f
 
     const val DEFAULT_HEIGHT = 0.35f
@@ -170,6 +171,19 @@ object Prefs {
             KEY_LEARNED,
             m.entries.joinToString(",") { e -> e.key + ">" + e.value }
         ).apply()
+    }
+    fun personal(ctx: Context): Set<String> =
+        (prefs(ctx).getString(KEY_PERSONAL, "") ?: "")
+            .split(",").map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+
+    fun addPersonal(ctx: Context, w: String) {
+        val s = personal(ctx).toMutableSet(); s.add(w)
+        prefs(ctx).edit().putString(KEY_PERSONAL, s.joinToString(",")).apply()
+    }
+
+    fun addBlacklist(ctx: Context, w: String) {
+        val s = blacklist(ctx).toMutableSet(); s.add(w)
+        prefs(ctx).edit().putString(KEY_BLACKLIST, s.joinToString(",")).apply()
     }
 
     fun langs(ctx: Context): List<String> =
@@ -1282,6 +1296,16 @@ class DualGridView(context: Context) : View(context) {
     private var undoWhole = Prefs.undoWhole(context)
     private var blacklist = Prefs.blacklist(context)
     private var learned = Prefs.learned(context)
+    private var personal = Prefs.personal(context)
+    private var lastAutocorrect: Pair<String, String>? = null
+    private var sugPressPointer = -1
+    private var sugPressStart = 0L
+    private var sugManageIndex = -1
+    private var sugManageDy = 0f
+    private val LONG_PRESS_MS = 1000L
+    private var sugManageDx = 0f
+    private val sugHandler = Handler(Looper.getMainLooper())
+    private var sugEnterRunnable: Runnable? = null
     private var locContext: Context = context
 
     private fun refreshLocContext() {
@@ -1374,8 +1398,12 @@ class DualGridView(context: Context) : View(context) {
         undoWhole = Prefs.undoWhole(context)
         blacklist = Prefs.blacklist(context)
         learned = Prefs.learned(context)
-        learned = Prefs.learned(context)
-        SpellEngine.load(context, lang)
+        personal = Prefs.personal(context)
+        SpellEngine.setPersonal(personal)
+        SpellEngine.loadAsync(context, lang) {
+            refreshSuggestions()
+            invalidate()
+        }
         refreshSuggestions()
         scale = (resources.displayMetrics.widthPixels /
                 resources.displayMetrics.density) / 430f
@@ -1452,6 +1480,7 @@ class DualGridView(context: Context) : View(context) {
         if (capsuleAnimStart >= 0L && t01(capsuleAnimStart, dur(150), now) < 1f) return true
         if (knobSpringStart >= 0L && t01(knobSpringStart, dur(200), now) < 1f) return true
         if (activePointers.values.any { it.knobDrag }) return true
+        if (sugManageIndex >= 0) return true
         if (pillWasDown) return true
         if (pillReleasedAt >= 0L && t01(pillReleasedAt, fbDur(), now) < 1f) return true
         return false
@@ -1468,7 +1497,7 @@ class DualGridView(context: Context) : View(context) {
     // --- Corrector (C1): token actual, suggeriments, autocorrecció i esborrat per paraula ---
     private fun currentToken(): String {
         val before = textTarget?.peekBefore(64) ?: return ""
-        val delims = " \n\t.,;:!?()\"'«»"
+        val delims = " \n\t.,;:!?()\"«»"
         var idx = -1
         for (i in before.indices) if (before[i] in delims) idx = i
         return if (idx < 0) before else before.substring(idx + 1)
@@ -1484,10 +1513,11 @@ class DualGridView(context: Context) : View(context) {
                 SpellEngine.accentBetter(low)?.let { if (!list.contains(it)) list.add(it) }
                 if (list.size < 3) {
                     for (c in SpellEngine.candidates(tok, 3)) {
-                        if (!list.contains(c)) list.add(c)
+                        if (!list.contains(c) && !blacklist.contains(c)) list.add(c)
                         if (list.size >= 3) break
                     }
                 }
+                if (list.isEmpty()) list.add(low)
                 list
             }
         }
@@ -1498,38 +1528,45 @@ class DualGridView(context: Context) : View(context) {
     private fun applySuggestion(word: String) {
         val token = currentToken()
         if (token.isEmpty()) return
+        lastAutocorrect = null
+        if (word == token.lowercase()) return
         Prefs.putLearned(context, token.lowercase(), word.lowercase())
         learned = Prefs.learned(context)
         repeat(token.length) { textTarget?.deleteBefore() }
         val formatted = if (token[0].isUpperCase())
             word.replaceFirstChar { it.uppercase() } else word
         textTarget?.commit(formatted)
+        textTarget?.commit(" ")
         undoStack.clear()
         pendingUndoLen = 0
         refreshSuggestions()
         invalidate()
     }
 
-    private fun maybeAutocorrect() {
-        if (!correctorOn || !autocorrectSpace) return
+    private fun maybeAutocorrect(): Boolean {
+        if (!correctorOn || !autocorrectSpace) return false
         val tok = currentToken()
-        if (tok.length < 2) return
+        if (tok.length < 2) return false
         val low = tok.lowercase()
-        if (blacklist.contains(low)) return
-        val learnedTarget = learned[low]
-        if (learnedTarget != null) {
-            replaceToken(tok, learnedTarget)
-            return
+        if (blacklist.contains(low) || personal.contains(low)) return false
+        val target: String? = if (learned.containsKey(low)) learned[low]
+        else {
+            val cand = if (SpellEngine.isWord(low)) SpellEngine.accentBetter(low)
+            else SpellEngine.candidates(tok, 1).firstOrNull()?.takeIf { it != low }
+            if (cand != null && SpellEngine.confidence(cand) * 100f >= confidenceMin) cand else null
         }
-        val top: String = if (SpellEngine.isWord(low)) {
-            SpellEngine.accentBetter(low) ?: return
-        } else {
-            val c = SpellEngine.candidates(tok, 1).firstOrNull() ?: return
-            if (c == low) return
-            c
-        }
-        if (SpellEngine.confidence(top) * 100f < confidenceMin) return
-        replaceToken(tok, top)
+        if (target == null) return false
+        repeat(tok.length) { textTarget?.deleteBefore() }
+        val formatted = if (tok[0].isUpperCase())
+            target.replaceFirstChar { it.uppercase() } else target
+        textTarget?.commit(formatted)
+        textTarget?.commit(" ")
+        tutEvent?.invoke("commit: ")
+        undoStack.clear()
+        lastAutocorrect = low to formatted
+        pendingUndoLen = 0
+        refreshSuggestions()
+        return true
     }
 
     private fun replaceToken(tok: String, target: String) {
@@ -1542,17 +1579,14 @@ class DualGridView(context: Context) : View(context) {
     }
 
     private fun deleteOneUnit(): String {
-        if (pendingUndoLen > 0 && undoWhole) {
-            val sb = StringBuilder()
-            repeat(pendingUndoLen) {
-                val ch = textTarget?.deleteBefore() ?: ""
-                if (ch.isEmpty()) return@repeat
-                sb.insert(0, ch)
+        if (undoWhole) {
+            lastAutocorrect?.let { (orig, formatted) ->
+                lastAutocorrect = null
+                repeat(formatted.length + 1) { textTarget?.deleteBefore() }
+                textTarget?.commit(orig)
+                refreshSuggestions()
+                return orig
             }
-            pendingUndoLen = 0
-            val whole = sb.toString()
-            if (whole.isNotEmpty()) undoStack.addLast(whole)
-            return whole
         }
         val ch = textTarget?.deleteBefore() ?: ""
         if (ch.isNotEmpty()) undoStack.addLast(ch)
@@ -1635,6 +1669,12 @@ class DualGridView(context: Context) : View(context) {
         lang = enabled[(idx + 1) % enabled.size]
         layout = Layouts.forLang(lang)
         Prefs.setLang(context, lang)
+        refreshLocContext()
+        suggestions = emptyList()
+        SpellEngine.loadAsync(context, lang) {
+            refreshSuggestions()
+            invalidate()
+        }
         onLangChanged?.invoke()
         tutEvent?.invoke("lang")
         kickAnim()
@@ -1663,10 +1703,17 @@ class DualGridView(context: Context) : View(context) {
             if (upper) out = out.uppercase()
             if (shiftMode == ShiftMode.ONCE) shiftMode = ShiftMode.OFF
         }
+        if (out.length == 1 && out[0] in autoSpaceChars) {
+            val b2 = textTarget?.peekBefore(2) ?: ""
+            if (b2.length == 2 && b2[1] == ' ' && b2[0] in autoSpaceChars) {
+                textTarget?.deleteBefore()
+            }
+        }
         textTarget?.commit(out)
         if (autoSpace && out.length == 1 && out[0] in autoSpaceChars) {
             textTarget?.commit(" ")
         }
+        lastAutocorrect = null
         undoStack.clear()
         if (bigramsEnabled && !sensitiveField && !tutorialMode &&
             out.length == 1 && out[0].isLetter()) {
@@ -2085,7 +2132,25 @@ class DualGridView(context: Context) : View(context) {
                 canvas.drawText(word, cx, topRect.centerY() + yC, textPaint)
             }
         }
-
+        if (sugManageIndex in 0..2) {
+            val cy = topRect.centerY()
+            val trackL = topRect.left + px(24f)
+            val trackR = topRect.right - px(24f)
+            val trackC = (trackL + trackR) / 2f
+            val knobX = (trackC + sugManageDx).coerceIn(trackL, trackR)
+            keycapPaint.color = blendColor(theme.role[Themes.STRIP], theme.flashPole, 0.25f)
+            canvas.drawRect(topRect, keycapPaint)
+            tickPaint.color = theme.text
+            tickPaint.strokeWidth = px(2f)
+            canvas.drawLine(trackL, cy, trackR, cy, tickPaint)
+            drawIcon(canvas, Icon.BACK, trackL - px(12f), cy, px(12f))
+            tickPaint.strokeWidth = px(3f)
+            canvas.drawLine(trackR + px(6f), cy, trackR + px(18f), cy, tickPaint)
+            canvas.drawLine(trackR + px(12f), cy - px(6f), trackR + px(12f), cy + px(6f), tickPaint)
+            tickPaint.strokeWidth = px(2f)
+            keycapPaint.color = theme.role[Themes.KNOB]
+            canvas.drawCircle(knobX, cy, px(10f), keycapPaint)
+        }
         fun dimFor(r: RectF): Float {
             if (!animDepth) return 0f
             var d = 0f
@@ -2473,6 +2538,18 @@ class DualGridView(context: Context) : View(context) {
                     knobDrag = knobDrag, grabX = x
                 )
                 activePointers[id] = st
+                if (zone == Zone.SUGGEST) {
+                    sugPressPointer = id
+                    sugPressStart = now
+                    sugManageDx = 0f
+                    val cell = cellIndex
+                    sugEnterRunnable = Runnable {
+                        sugManageIndex = cell
+                        sugManageDx = 0f
+                        kickAnim()
+                    }
+                    sugHandler.postDelayed(sugEnterRunnable!!, LONG_PRESS_MS)
+                }
 
                 if (side != null) {
                     presses[id] = PressAnim(side, row, col, now)
@@ -2560,7 +2637,12 @@ class DualGridView(context: Context) : View(context) {
                             else directionFrom(dx, dy)
                         }
                     }
-
+                    else if (state.zone == Zone.SUGGEST) {
+                        if (sugManageIndex >= 0) {
+                            sugManageDx = x - state.startX
+                            kickAnim()
+                        }
+                    }
                     state.lastX = x
                     state.lastTime = t
                 }
@@ -2581,7 +2663,34 @@ class DualGridView(context: Context) : View(context) {
                     knobSpringStart = now
                     kickAnim()
                 }
-                resolvePointer(state)
+                var managed = false
+                if (state.zone == Zone.SUGGEST) {
+                    sugPressPointer = -1
+                    sugEnterRunnable?.let { sugHandler.removeCallbacks(it) }
+                    sugEnterRunnable = null
+                    if (sugManageIndex >= 0) {
+                        managed = true
+                        val word = suggestions.getOrElse(
+                            when (sugManageIndex) { 0 -> 1; 1 -> 0; else -> 2 }) { "" }
+                        val th = px(60f)
+                        when {
+                            sugManageDx < -th -> {
+                                Prefs.addBlacklist(context, word)
+                                blacklist = Prefs.blacklist(context)
+                            }
+                            sugManageDx > th -> {
+                                Prefs.addPersonal(context, word)
+                                personal = Prefs.personal(context)
+                                SpellEngine.setPersonal(personal)
+                            }
+                        }
+                        sugManageIndex = -1
+                        sugManageDx = 0f
+                        refreshSuggestions()
+                        invalidate()
+                    }
+                }
+                if (!managed) resolvePointer(state)
             }
 
             MotionEvent.ACTION_CANCEL -> {
@@ -2697,14 +2806,17 @@ class DualGridView(context: Context) : View(context) {
 
             Zone.SPACE -> when (dir) {
                 SwipeDir.TAP -> {
-                    maybeAutocorrect()
-                    val b = textTarget?.peekBefore(2) ?: ""
-                    val blocked = autoSpace && b.length == 2 && b[1] == ' ' && b[0] in autoSpaceChars
-                    if (!blocked) {
-                        textTarget?.commit(" ")
-                        tutEvent?.invoke("commit: ")
-                        undoStack.clear()
-                        spawnFeedback(null, 0, 0, true, "␣")
+                    val applied = maybeAutocorrect()
+                    if (!applied) {
+                        val b = textTarget?.peekBefore(2) ?: ""
+                        val blocked = autoSpace && b.length == 2 && b[1] == ' ' && b[0] in autoSpaceChars
+                        if (!blocked) {
+                            textTarget?.commit(" ")
+                            tutEvent?.invoke("commit: ")
+                            undoStack.clear()
+                            lastAutocorrect = null
+                            spawnFeedback(null, 0, 0, true, "␣")
+                        }
                     }
                 }
                 SwipeDir.W -> {

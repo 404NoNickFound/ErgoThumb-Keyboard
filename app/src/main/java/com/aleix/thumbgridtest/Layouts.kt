@@ -45,7 +45,8 @@ object Layouts {
             KeyDef("e", mapOf(
                 SwipeDir.SW to "è", SwipeDir.SE to "é",
                 SwipeDir.W to ".", SwipeDir.E to ",",
-                SwipeDir.N to "?", SwipeDir.NW to "!"
+                SwipeDir.N to "?", SwipeDir.NW to "!",
+                SwipeDir.NE to "-", SwipeDir.NE to "-"
             )),
             KeyDef("v", mapOf(SwipeDir.N to "w")),
             KeyDef("g", mapOf(SwipeDir.N to "k", SwipeDir.E to "h", SwipeDir.NE to "j")),
@@ -72,7 +73,7 @@ object Layouts {
             KeyDef("p"),
             KeyDef("a", mapOf(SwipeDir.SE to "á")),
             KeyDef("e", mapOf(
-                SwipeDir.SE to "é",
+                SwipeDir.SE to "é", SwipeDir.NE to "-",
                 SwipeDir.W to ".", SwipeDir.E to ",",
                 SwipeDir.N to "¿", SwipeDir.NW to "¡"
             )),
@@ -102,7 +103,8 @@ object Layouts {
             KeyDef("a"),
             KeyDef("e", mapOf(
                 SwipeDir.W to ".", SwipeDir.E to ",",
-                SwipeDir.N to "?", SwipeDir.NW to "!"
+                SwipeDir.N to "?", SwipeDir.NW to "!",
+                SwipeDir.NE to "-"
             )),
             KeyDef("v", mapOf(SwipeDir.N to "w")),
             KeyDef("g", mapOf(SwipeDir.N to "k", SwipeDir.E to "h", SwipeDir.NE to "j")),
