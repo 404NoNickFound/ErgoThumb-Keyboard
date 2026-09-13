@@ -59,6 +59,22 @@ object SpellEngine {
             Log.e("ThumbGrid", "dict load failed for $code", e)
             return
         }
+        // Filtres d'artefactes de subtítols:
+        // 1) partits per guió on la versió sense guió existeix (to-morrow -> tomorrow)
+        // 2) reduplicacions amb guió on la part única existeix (this-this, this--this)
+        val allSet = HashSet(bf)
+        val keep = ArrayList<String>(bf.size)
+        for (w in bf) {
+            if ('-' in w) {
+                val noHyphen = w.replace("-", "")
+                val parts = w.split("-").filter { it.isNotEmpty() }.toSet()
+                val redup = parts.size == 1 && allSet.contains(parts.first())
+                if (allSet.contains(noHyphen) || redup) continue
+            }
+            keep.add(w)
+        }
+        bf.clear()
+        bf.addAll(keep)
         val ua = HashMap<String, String>()
         for (w in bf) {
             val stripped = stripAccents(w)

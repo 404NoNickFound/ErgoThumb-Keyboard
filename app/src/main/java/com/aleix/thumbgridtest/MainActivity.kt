@@ -185,6 +185,24 @@ object Prefs {
         val s = blacklist(ctx).toMutableSet(); s.add(w)
         prefs(ctx).edit().putString(KEY_BLACKLIST, s.joinToString(",")).apply()
     }
+    fun removePersonal(ctx: Context, w: String) {
+        val s = personal(ctx).toMutableSet(); s.remove(w)
+        prefs(ctx).edit().putString(KEY_PERSONAL, s.joinToString(",")).apply()
+    }
+
+    fun removeBlacklist(ctx: Context, w: String) {
+        val s = blacklist(ctx).toMutableSet(); s.remove(w)
+        prefs(ctx).edit().putString(KEY_BLACKLIST, s.joinToString(",")).apply()
+    }
+
+    fun purgeLearnedValue(ctx: Context, value: String) {
+        val m = learned(ctx).toMutableMap()
+        val keys = m.keys.filter { m[it] == value }
+        if (keys.isEmpty()) return
+        keys.forEach { m.remove(it) }
+        prefs(ctx).edit().putString(KEY_LEARNED,
+            m.entries.joinToString(",") { e -> e.key + ">" + e.value }).apply()
+    }
 
     fun langs(ctx: Context): List<String> =
         (prefs(ctx).getString(KEY_LANGS, "ca,es,en") ?: "ca,es,en")
@@ -1509,8 +1527,10 @@ class DualGridView(context: Context) : View(context) {
             if (tok.length < 2) emptyList() else {
                 val low = tok.lowercase()
                 val list = ArrayList<String>(3)
-                learned[low]?.let { list.add(it) }
-                SpellEngine.accentBetter(low)?.let { if (!list.contains(it)) list.add(it) }
+                learned[low]?.let { if (!blacklist.contains(it)) list.add(it) }
+                SpellEngine.accentBetter(low)?.let {
+                    if (!list.contains(it) && !blacklist.contains(it)) list.add(it)
+                }
                 if (list.size < 3) {
                     for (c in SpellEngine.candidates(tok, 3)) {
                         if (!list.contains(c) && !blacklist.contains(c)) list.add(c)
@@ -1556,6 +1576,7 @@ class DualGridView(context: Context) : View(context) {
             if (cand != null && SpellEngine.confidence(cand) * 100f >= confidenceMin) cand else null
         }
         if (target == null) return false
+        if (blacklist.contains(target)) return false
         repeat(tok.length) { textTarget?.deleteBefore() }
         val formatted = if (tok[0].isUpperCase())
             target.replaceFirstChar { it.uppercase() } else target
@@ -2134,22 +2155,45 @@ class DualGridView(context: Context) : View(context) {
         }
         if (sugManageIndex in 0..2) {
             val cy = topRect.centerY()
-            val trackL = topRect.left + px(24f)
-            val trackR = topRect.right - px(24f)
+            val trackH = topRect.height() * 0.62f
+            val trackL = topRect.left + px(10f)
+            val trackR = topRect.right - px(10f)
             val trackC = (trackL + trackR) / 2f
-            val knobX = (trackC + sugManageDx).coerceIn(trackL, trackR)
-            keycapPaint.color = blendColor(theme.role[Themes.STRIP], theme.flashPole, 0.25f)
-            canvas.drawRect(topRect, keycapPaint)
-            tickPaint.color = theme.text
+            val half = (trackR - trackL) / 2f - trackH / 2f
+            val knobX = (trackC + sugManageDx).coerceIn(trackC - half, trackC + half)
+            keycapPaint.color = theme.role[Themes.SLIDER]
+            canvas.drawRoundRect(
+                RectF(trackL, cy - trackH / 2f, trackR, cy + trackH / 2f),
+                trackH / 2f, trackH / 2f, keycapPaint)
+            tickPaint.color = theme.hint
+            tickPaint.alpha = 110
             tickPaint.strokeWidth = px(2f)
-            canvas.drawLine(trackL, cy, trackR, cy, tickPaint)
-            drawIcon(canvas, Icon.BACK, trackL - px(12f), cy, px(12f))
+            val tickSpacing = px(12f)
+            var tx = trackL + tickSpacing
+            while (tx < trackR - tickSpacing / 2f) {
+                canvas.drawLine(tx, cy - px(6f), tx, cy + px(6f), tickPaint)
+                tx += tickSpacing
+            }
+            tickPaint.alpha = 255
+            drawIcon(canvas, Icon.BACK, trackL + trackH / 2f, cy, px(12f))
             tickPaint.strokeWidth = px(3f)
-            canvas.drawLine(trackR + px(6f), cy, trackR + px(18f), cy, tickPaint)
-            canvas.drawLine(trackR + px(12f), cy - px(6f), trackR + px(12f), cy + px(6f), tickPaint)
+            tickPaint.color = theme.hint
+            val pr = trackR - trackH / 2f
+            canvas.drawLine(pr - px(6f), cy, pr + px(6f), cy, tickPaint)
+            canvas.drawLine(pr, cy - px(6f), pr, cy + px(6f), tickPaint)
             tickPaint.strokeWidth = px(2f)
-            keycapPaint.color = theme.role[Themes.KNOB]
-            canvas.drawCircle(knobX, cy, px(10f), keycapPaint)
+            val kd = trackH * 1.15f
+            keycapPaint.color = when {
+                sugManageDx > px(30f) -> 0xFF4CAF50.toInt()
+                sugManageDx < -px(30f) -> 0xFFE53935.toInt()
+                else -> theme.role[Themes.KNOB]
+            }
+            canvas.drawCircle(knobX, cy, kd / 2f, keycapPaint)
+            tickPaint.color = theme.hint
+            for (i in -1..1) {
+                val bx = knobX + i * px(5f)
+                canvas.drawLine(bx, cy - px(7f), bx, cy + px(7f), tickPaint)
+            }
         }
         fun dimFor(r: RectF): Float {
             if (!animDepth) return 0f
@@ -2676,11 +2720,17 @@ class DualGridView(context: Context) : View(context) {
                         when {
                             sugManageDx < -th -> {
                                 Prefs.addBlacklist(context, word)
+                                Prefs.purgeLearnedValue(context, word)
+                                Prefs.removePersonal(context, word)
                                 blacklist = Prefs.blacklist(context)
+                                personal = Prefs.personal(context)
+                                SpellEngine.setPersonal(personal)
                             }
                             sugManageDx > th -> {
                                 Prefs.addPersonal(context, word)
+                                Prefs.removeBlacklist(context, word)
                                 personal = Prefs.personal(context)
+                                blacklist = Prefs.blacklist(context)
                                 SpellEngine.setPersonal(personal)
                             }
                         }
