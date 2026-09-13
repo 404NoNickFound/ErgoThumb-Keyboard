@@ -1,4 +1,9 @@
 <resources>
+    <string name="switch_nextword">Predicció de paraula següent (aprenentatge local)</string>
+    <string name="nextword_warning_title">Abans d\'activar la predicció</string>
+    <string name="nextword_warning_body">Per predicir la paraula següent, el teclat guarda localment quines paraules escrius després de quines. Tot es queda al dispositiu i no s\'envia enlloc; pots desactivar-ho quan vulguis.</string>
+    <string name="nextword_warning_ok">Entesos, activa la predicció</string>
+    <string name="banner_tutorial">Fes el tutorial ▸</string>
     <string name="section_corrector">Corrector</string>
     <string name="switch_corrector">Activa el corrector ortogràfic</string>
     <string name="switch_autocorrect_space">Autocorrecció en tocar l\'espai</string>

@@ -203,7 +203,34 @@ object Prefs {
         prefs(ctx).edit().putString(KEY_LEARNED,
             m.entries.joinToString(",") { e -> e.key + ">" + e.value }).apply()
     }
+    const val KEY_NEXTWORD = "nextword_enabled"
+    const val KEY_NEXTWORD_WARNED = "nextword_warned"
+    const val KEY_WORDPAIRS = "wordpairs"
 
+    fun nextWord(ctx: Context) = prefs(ctx).getBoolean(KEY_NEXTWORD, false)
+    fun nextWordWarned(ctx: Context) = prefs(ctx).getBoolean(KEY_NEXTWORD_WARNED, false)
+
+    fun logWordPair(ctx: Context, lang: String, prev: String, next: String) {
+        val raw = prefs(ctx).getString(KEY_WORDPAIRS, "") ?: ""
+        val m = LinkedHashMap<String, Int>()
+        for (e in raw.split(",").filter { it.isNotEmpty() }) {
+            val i = e.lastIndexOf('=')
+            if (i > 0) m[e.substring(0, i)] = e.substring(i + 1).toIntOrNull() ?: 1
+        }
+        val key = "$lang>$prev>$next"
+        m[key] = (m[key] ?: 0) + 1
+        prefs(ctx).edit().putString(KEY_WORDPAIRS,
+            m.entries.joinToString(",") { "${it.key}=${it.value}" }).apply()
+    }
+
+    fun wordPairFollowers(ctx: Context, lang: String, prev: String): List<Pair<String, Int>> {
+        val raw = prefs(ctx).getString(KEY_WORDPAIRS, "") ?: ""
+        val pre = "$lang>$prev>"
+        return raw.split(",").filter { it.startsWith(pre) }.mapNotNull { e ->
+            val i = e.lastIndexOf('=')
+            if (i <= 0) null else e.substring(pre.length, i) to (e.substring(i + 1).toIntOrNull() ?: 1)
+        }.sortedByDescending { it.second }
+    }
     fun langs(ctx: Context): List<String> =
         (prefs(ctx).getString(KEY_LANGS, "ca,es,en") ?: "ca,es,en")
             .split(",").map { it.trim() }.filter { it in Layouts.CODES }
@@ -488,6 +515,7 @@ class SettingsActivity : AppCompatActivity() {
     private val sectionHeaders = mutableListOf<TextView>()
     private val sectionContainers = mutableListOf<LinearLayout>()
     private lateinit var corrSw: MaterialSwitch
+    private lateinit var nwSw: MaterialSwitch
 
     private val swatches = listOf(
         0,
@@ -620,6 +648,18 @@ class SettingsActivity : AppCompatActivity() {
                     }
                 } else putB(Prefs.KEY_CORRECTOR, true)
             } else putB(Prefs.KEY_CORRECTOR, false)
+            nwSw = mSwitch(R.string.switch_nextword, Prefs.nextWord(this)) { v ->
+                if (v) {
+                    if (!Prefs.nextWordWarned(this)) {
+                        nwSw.isChecked = false
+                        showNextWordWarning {
+                            putB(Prefs.KEY_NEXTWORD_WARNED, true)
+                            putB(Prefs.KEY_NEXTWORD, true)
+                            nwSw.isChecked = true
+                        }
+                    } else putB(Prefs.KEY_NEXTWORD, true)
+                } else putB(Prefs.KEY_NEXTWORD, false)
+            }
         }
         mSwitch(R.string.switch_autocorrect_space, Prefs.autocorrectSpace(this))
         { putB(Prefs.KEY_AUTOCORRECT_SPACE, it) }
@@ -1013,6 +1053,15 @@ class SettingsActivity : AppCompatActivity() {
             .setPositiveButton(getString(R.string.corrector_warning_ok)) { _, _ -> onAccept() }
             .show()
     }
+    private fun showNextWordWarning(onAccept: () -> Unit) {
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.nextword_warning_title))
+            .setMessage(getString(R.string.nextword_warning_body))
+            .setCancelable(false)
+            .setNegativeButton(getString(R.string.bigrams_warning_cancel), null)
+            .setPositiveButton(getString(R.string.nextword_warning_ok)) { _, _ -> onAccept() }
+            .show()
+    }
 
     private fun showBlacklist() {
         val prefs = getSharedPreferences(Prefs.NAME, MODE_PRIVATE)
@@ -1321,6 +1370,13 @@ class DualGridView(context: Context) : View(context) {
     private var sugManageIndex = -1
     private var sugManageDy = 0f
     private val LONG_PRESS_MS = 1000L
+    private var nextWordOn = Prefs.nextWord(context)
+    private var nextWordCands: List<String> = emptyList()
+    private var lastCompletedWord = ""
+    private var tutorialBanner = !Prefs.tutorialDone(context)
+    private val clipMgr = context.getSystemService(Context.CLIPBOARD_SERVICE)
+            as android.content.ClipboardManager
+    private val TUTORIAL_SENTINEL = ""
     private var sugManageDx = 0f
     private val sugHandler = Handler(Looper.getMainLooper())
     private var sugEnterRunnable: Runnable? = null
@@ -1418,6 +1474,8 @@ class DualGridView(context: Context) : View(context) {
         learned = Prefs.learned(context)
         personal = Prefs.personal(context)
         SpellEngine.setPersonal(personal)
+        nextWordOn = Prefs.nextWord(context)
+        tutorialBanner = !Prefs.tutorialDone(context)
         SpellEngine.loadAsync(context, lang) {
             refreshSuggestions()
             invalidate()
@@ -1522,29 +1580,50 @@ class DualGridView(context: Context) : View(context) {
     }
 
     private fun refreshSuggestions() {
-        suggestions = if (!correctorOn) emptyList() else {
-            val tok = currentToken()
-            if (tok.length < 2) emptyList() else {
-                val low = tok.lowercase()
-                val list = ArrayList<String>(3)
-                learned[low]?.let { if (!blacklist.contains(it)) list.add(it) }
-                SpellEngine.accentBetter(low)?.let {
-                    if (!list.contains(it) && !blacklist.contains(it)) list.add(it)
-                }
-                if (list.size < 3) {
-                    for (c in SpellEngine.candidates(tok, 3)) {
-                        if (!list.contains(c) && !blacklist.contains(c)) list.add(c)
-                        if (list.size >= 3) break
-                    }
-                }
-                if (list.isEmpty()) list.add(low)
-                list
+        if (!correctorOn) { suggestions = emptyList(); return }
+        val tok = currentToken()
+        val low = tok.lowercase()
+        val base = ArrayList<String>(3)
+        if (tok.length >= 2) {
+            learned[low]?.let { if (!blacklist.contains(it)) base.add(it) }
+            SpellEngine.accentBetter(low)?.let {
+                if (!base.contains(it) && !blacklist.contains(it)) base.add(it)
             }
+            if (base.size < 3) {
+                for (c in SpellEngine.candidates(tok, 3)) {
+                    if (!base.contains(c) && !blacklist.contains(c)) base.add(c)
+                    if (base.size >= 3) break
+                }
+            }
+            if (base.isEmpty()) base.add(low)
+        } else if (tok.isEmpty()) {
+            base.addAll(nextWordCands)
         }
+        val clip = (clipMgr.primaryClip?.takeIf { it.itemCount > 0 }
+            ?.getItemAt(0)?.coerceToText(context)?.toString()?.trim()).orEmpty()
+        val third = if (clip.isNotEmpty()) clip else base.getOrElse(2) { "" }
+        suggestions = if (tok.isEmpty() && base.isEmpty() && clip.isEmpty() && tutorialBanner)
+            listOf("", TUTORIAL_SENTINEL, "")
+        else listOf(base.getOrElse(1) { "" }, base.getOrElse(0) { "" }, third)
         if (correctorOn)
-            Log.d("ThumbGrid", "sugg tok='${currentToken()}' n=${suggestions.size} dict=${SpellEngine.size()}")
+            Log.d("ThumbGrid", "sugg tok='$tok' n=${suggestions.count { it.isNotEmpty() }} dict=${SpellEngine.size()}")
     }
-
+    private fun handleBoundary(finished: String) {
+        val f = finished.lowercase()
+        if (f.isNotEmpty()) {
+            if (nextWordOn && lastCompletedWord.isNotEmpty())
+                Prefs.logWordPair(context, lang, lastCompletedWord, f)
+            lastCompletedWord = f
+            nextWordCands = if (nextWordOn)
+                Prefs.wordPairFollowers(context, lang, f)
+                    .filter { SpellEngine.isWord(it.first) && !blacklist.contains(it.first) }
+                    .take(3).map { it.first }
+            else emptyList()
+        } else {
+            nextWordCands = emptyList()
+        }
+        refreshSuggestions()
+    }
     private fun applySuggestion(word: String) {
         val token = currentToken()
         if (token.isEmpty()) return
@@ -1586,7 +1665,7 @@ class DualGridView(context: Context) : View(context) {
         undoStack.clear()
         lastAutocorrect = low to formatted
         pendingUndoLen = 0
-        refreshSuggestions()
+        handleBoundary(formatted.lowercase())
         return true
     }
 
@@ -1719,6 +1798,7 @@ class DualGridView(context: Context) : View(context) {
 
     private fun commitChar(raw: String): String {
         var out = raw
+        val boundaryWord = if (out.length == 1 && out[0] in autoSpaceChars) currentToken() else ""
         if (out.length == 1 && out[0].isLetter()) {
             val upper = shiftMode != ShiftMode.OFF || shouldAutoCap()
             if (upper) out = out.uppercase()
@@ -1745,7 +1825,7 @@ class DualGridView(context: Context) : View(context) {
             lastLetter = null
         }
         tutEvent?.invoke("commit:$out")
-        refreshSuggestions()
+        if (boundaryWord.isNotEmpty()) handleBoundary(boundaryWord) else refreshSuggestions()
         invalidate()
         return out
     }
@@ -2132,7 +2212,8 @@ class DualGridView(context: Context) : View(context) {
             val third = topRect.width() / 3f
             for (i in 0..2) {
                 val candIdx = when (i) { 0 -> 1; 1 -> 0; else -> 2 }
-                val word = suggestions.getOrElse(candIdx) { "" }
+                var word = suggestions.getOrElse(candIdx) { "" }
+                if (word == TUTORIAL_SENTINEL) word = locStr(R.string.banner_tutorial)
                 if (word.isEmpty()) continue
                 val cx = topRect.left + third * i + third / 2f
                 if (i == 1) {
@@ -2790,6 +2871,28 @@ class DualGridView(context: Context) : View(context) {
                 if (dir != SwipeDir.TAP) return
                 val candIdx = when (state.cellIndex) { 0 -> 1; 1 -> 0; else -> 2 }
                 val word = suggestions.getOrElse(candIdx) { "" }
+                if (word == TUTORIAL_SENTINEL) {
+                    val it = Intent(context, TutorialActivity::class.java)
+                    it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(it)
+                } else if (word.isNotEmpty()) {
+                    val clip = (clipMgr.primaryClip?.takeIf { it.itemCount > 0 }
+                        ?.getItemAt(0)?.coerceToText(context)?.toString()?.trim()).orEmpty()
+                    if (candIdx == 2 && clip.isNotEmpty() && word == clip) {
+                        textTarget?.commit(clip)
+                        undoStack.clear()
+                        refreshSuggestions()
+                        invalidate()
+                    } else if (currentToken().isEmpty()) {
+                        textTarget?.commit(word)
+                        textTarget?.commit(" ")
+                        undoStack.clear()
+                        refreshSuggestions()
+                        invalidate()
+                    } else {
+                        applySuggestion(word)
+                    }
+                }
                 if (word.isNotEmpty()) applySuggestion(word)
             }
 
@@ -2858,6 +2961,7 @@ class DualGridView(context: Context) : View(context) {
                 SwipeDir.TAP -> {
                     val applied = maybeAutocorrect()
                     if (!applied) {
+                        val finished = currentToken()
                         val b = textTarget?.peekBefore(2) ?: ""
                         val blocked = autoSpace && b.length == 2 && b[1] == ' ' && b[0] in autoSpaceChars
                         if (!blocked) {
@@ -2867,6 +2971,7 @@ class DualGridView(context: Context) : View(context) {
                             lastAutocorrect = null
                             spawnFeedback(null, 0, 0, true, "␣")
                         }
+                        handleBoundary(finished)
                     }
                 }
                 SwipeDir.W -> {

@@ -1,4 +1,9 @@
 <resources>
+    <string name="switch_nextword">Predicción de palabra siguiente (aprendizaje local)</string>
+    <string name="nextword_warning_title">Antes de activar la predicción</string>
+    <string name="nextword_warning_body">Para predecir la palabra siguiente, el teclado guarda localmente qué palabras escribes después de cuáles. Todo se queda en el dispositivo y no se envía a ningún sitio; puedes desactivarlo cuando quieras.</string>
+    <string name="nextword_warning_ok">Entendido, activa la predicción</string>
+    <string name="banner_tutorial">Haz el tutorial ▸</string>
     <string name="section_corrector">Corrector</string>
     <string name="switch_corrector">Activa el corrector ortográfico</string>
     <string name="switch_autocorrect_space">Autocorrección al tocar el espacio</string>
