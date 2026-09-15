@@ -1,5 +1,6 @@
 <resources>
     <string name="switch_nextword">Next-word prediction (local learning)</string>
+    <string name="switch_cliphist">Clipboard history (expires after 1 h unused)</string>
     <string name="nextword_warning_title">Before enabling prediction</string>
     <string name="nextword_warning_body">To predict the next word, the keyboard stores locally which words you type after which. Everything stays on-device and is never sent anywhere; you can disable it at any time.</string>
     <string name="nextword_warning_ok">Understood, enable prediction</string>
