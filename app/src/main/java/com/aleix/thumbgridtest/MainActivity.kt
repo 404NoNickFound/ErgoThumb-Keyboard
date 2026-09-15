@@ -536,14 +536,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        val now = SystemClock.uptimeMillis()
-        if (now - lastReloadMs < 1000L) return
-        lastReloadMs = now
-        try {
-            if (::dualGridView.isInitialized) dualGridView.reloadPrefs()
-        } catch (e: Exception) {
-            Log.e("ThumbGrid", "reloadPrefs a onResume ha fallat", e)
-        }
+        // app de proves: sense recarrega en viu; els canvis s'apliquen en reobrir o via IME
     }
 }
 class SettingsActivity : AppCompatActivity() {
