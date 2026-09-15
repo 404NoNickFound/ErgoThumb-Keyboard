@@ -1282,6 +1282,9 @@ class DualGridView(context: Context) : View(context) {
     private var undoWhole = Prefs.undoWhole(context)
     private var blacklist = Prefs.blacklist(context)
     private var learned = Prefs.learned(context)
+    private val clipMgr = context.getSystemService(Context.CLIPBOARD_SERVICE)
+            as android.content.ClipboardManager
+    private var clipFull = ""
     private var locContext: Context = context
 
     private fun refreshLocContext() {
@@ -1475,24 +1478,34 @@ class DualGridView(context: Context) : View(context) {
     }
 
     private fun refreshSuggestions() {
-        suggestions = if (!correctorOn) emptyList() else {
-            val tok = currentToken()
-            if (tok.length < 2) emptyList() else {
-                val low = tok.lowercase()
-                val list = ArrayList<String>(3)
-                learned[low]?.let { list.add(it) }
-                SpellEngine.accentBetter(low)?.let { if (!list.contains(it)) list.add(it) }
-                if (list.size < 3) {
-                    for (c in SpellEngine.candidates(tok, 3)) {
-                        if (!list.contains(c)) list.add(c)
-                        if (list.size >= 3) break
-                    }
-                }
-                list
+        if (!correctorOn) { suggestions = emptyList(); return }
+        val tok = currentToken()
+        val low = tok.lowercase()
+        val base = ArrayList<String>(3)
+        if (tok.length >= 2) {
+            learned[low]?.let { if (!blacklist.contains(it)) base.add(it) }
+            SpellEngine.accentBetter(low)?.let {
+                if (!base.contains(it) && !blacklist.contains(it)) base.add(it)
             }
+            if (base.size < 3) {
+                for (c in SpellEngine.candidates(tok, 3)) {
+                    if (!base.contains(c) && !blacklist.contains(c)) base.add(c)
+                    if (base.size >= 3) break
+                }
+            }
+            if (base.isEmpty()) base.add(low)
         }
-        if (correctorOn)
-            Log.d("ThumbGrid", "sugg tok='${currentToken()}' n=${suggestions.size} dict=${SpellEngine.size()}")
+        val clip = if (context is InputMethodService)
+            (clipMgr.primaryClip?.takeIf { it.itemCount > 0 }
+                ?.getItemAt(0)?.coerceToText(context)?.toString()?.trim()).orEmpty()
+        else ""
+        clipFull = clip
+        val third = if (tok.isEmpty() && clip.isNotEmpty())
+            (if (clip.length > 14) clip.take(14) + "…" else clip)
+        else base.getOrElse(2) { "" }
+        suggestions = if (base.all { it.isEmpty() } && third.isEmpty()) emptyList()
+        else listOf(base.getOrElse(1) { "" }, base.getOrElse(0) { "" }, third)
+        Log.d("ThumbGrid", "sugg tok='$tok' n=${suggestions.count { it.isNotEmpty() }} dict=${SpellEngine.size()}")
     }
 
     private fun applySuggestion(word: String) {
@@ -2630,6 +2643,13 @@ class DualGridView(context: Context) : View(context) {
             Zone.SUGGEST -> {
                 if (dir != SwipeDir.TAP) return
                 val candIdx = when (state.cellIndex) { 0 -> 1; 1 -> 0; else -> 2 }
+                if (candIdx == 2 && clipFull.isNotEmpty() && currentToken().isEmpty()) {
+                    textTarget?.commit(clipFull)
+                    undoStack.clear()
+                    refreshSuggestions()
+                    invalidate()
+                    return
+                }
                 val word = suggestions.getOrElse(candIdx) { "" }
                 if (word.isNotEmpty()) applySuggestion(word)
             }
