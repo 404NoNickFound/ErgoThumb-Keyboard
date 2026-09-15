@@ -1,43 +1,25 @@
 package com.aleix.thumbgridtest
 
 import android.content.Context
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import java.util.zip.GZIPInputStream
 
 object SpellEngine {
 
-    @Volatile private var lang = ""
-    @Volatile private var words: Set<String> = emptySet()
-    @Volatile private var byFreq: List<String> = emptyList()
-    @Volatile private var byAlpha: List<String> = emptyList()
-    @Volatile private var rank: Map<String, Int> = emptyMap()
-    @Volatile private var freq: Map<String, Int> = emptyMap()
-    @Volatile private var unaccent: Map<String, String> = emptyMap()
-    @Volatile private var personal: Set<String> = emptySet()
-    @Volatile private var loading = false
+    private var lang = ""
+    private val words = HashSet<String>()
+    private val byFreq = ArrayList<String>()
+    private val byAlpha = ArrayList<String>()
+    private val rank = HashMap<String, Int>()
+    private val freq = HashMap<String, Int>()
+    private val unaccent = HashMap<String, String>()
 
     fun size(): Int = byFreq.size
 
-    fun setPersonal(s: Set<String>) { personal = s }
-    fun isPersonal(w: String): Boolean = personal.contains(w)
-
-    fun loadAsync(ctx: Context, code: String, onDone: () -> Unit) {
-        if (code == lang && byFreq.isNotEmpty()) { onDone(); return }
-        if (loading) return
-        loading = true
-        val appCtx = ctx.applicationContext
-        Thread({
-            try { load(appCtx, code) } finally { loading = false }
-            Handler(Looper.getMainLooper()).post(onDone)
-        }, "SpellEngine-load").start()
-    }
-
-    private fun load(ctx: Context, code: String) {
+    fun load(ctx: Context, code: String) {
         if (code == lang && byFreq.isNotEmpty()) return
-        val bf = ArrayList<String>()
-        val fq = HashMap<String, Int>()
+        lang = code
+        words.clear(); byFreq.clear(); byAlpha.clear(); rank.clear(); freq.clear(); unaccent.clear()
         try {
             val reader = try {
                 GZIPInputStream(ctx.assets.open("dicts/$code.txt.gz"))
@@ -50,53 +32,29 @@ object SpellEngine {
                     val sp = line.indexOf(' ')
                     if (sp <= 0) continue
                     val w = line.substring(0, sp)
-                    if (!w.first().isLetter() || !w.last().isLetter()) continue
-                    bf.add(w)
-                    fq[w] = line.substring(sp + 1).toIntOrNull() ?: 1
+                    val n = line.substring(sp + 1).toIntOrNull() ?: 1
+                    byFreq.add(w)
+                    freq[w] = n
                 }
             }
+            for (w in byFreq) {
+                val stripped = stripAccents(w)
+                if (stripped != w) {
+                    val cur = unaccent[stripped]
+                    if (cur == null || (freq[w] ?: 0) > (freq[cur] ?: 0)) unaccent[stripped] = w
+                }
+            }
+            byAlpha.addAll(byFreq)
+            byAlpha.sort()
         } catch (e: Exception) {
             Log.e("ThumbGrid", "dict load failed for $code", e)
-            return
         }
-        // Filtres d'artefactes de subtítols:
-        // 1) partits per guió on la versió sense guió existeix (to-morrow -> tomorrow)
-        // 2) reduplicacions amb guió on la part única existeix (this-this, this--this)
-        val allSet = HashSet(bf)
-        val keep = ArrayList<String>(bf.size)
-        for (w in bf) {
-            if ('-' in w) {
-                val noHyphen = w.replace("-", "")
-                val parts = w.split("-").filter { it.isNotEmpty() }.toSet()
-                val redup = parts.size == 1 && allSet.contains(parts.first())
-                if (allSet.contains(noHyphen) || redup) continue
-            }
-            keep.add(w)
-        }
-        bf.clear()
-        bf.addAll(keep)
-        val ua = HashMap<String, String>()
-        for (w in bf) {
-            val stripped = stripAccents(w)
-            if (stripped != w) {
-                val cur = ua[stripped]
-                if (cur == null || (fq[w] ?: 0) > (fq[cur] ?: 0)) ua[stripped] = w
-            }
-        }
-        val ba = ArrayList(bf)
-        ba.sort()
-        val rk = HashMap<String, Int>(bf.size * 2)
-        for ((i, w) in bf.withIndex()) rk[w] = i
-        lang = code
-        words = HashSet(bf)
-        byFreq = bf
-        byAlpha = ba
-        rank = rk
-        freq = fq
-        unaccent = ua
+        words.addAll(byFreq)
+        for ((i, w) in byFreq.withIndex()) rank[w] = i
     }
 
     fun isWord(w: String): Boolean = words.contains(w)
+
     fun freqOf(w: String): Int = freq[w] ?: 0
 
     fun confidence(word: String): Float {
@@ -109,26 +67,19 @@ object SpellEngine {
         return if (freqOf(target) > freqOf(token) * 3) target else null
     }
 
-    private const val ACCENTED = "àáâäãèéêëìíîïòóôöõøùúûüçñÀÁÂÄÃÈÉÊËÌÍÎÏÒÓÔÖÕØÙÚÛÜÇÑ"
-    private const val PLAIN =    "aaaaaeeeeiiiioooooouuuucnaaaaaeeeeiiiioooooouuuucn"
-
-    private fun stripAccents(s: String): String {
-        val sb = StringBuilder(s.length)
-        for (ch in s) {
-            val i = ACCENTED.indexOf(ch)
-            sb.append(if (i >= 0) PLAIN[i] else ch)
-        }
-        return sb.toString()
-    }
+    private fun stripAccents(s: String): String =
+        java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFD)
+            .replace(Regex("\\p{Mn}"), "")
 
     fun candidates(token: String, limit: Int): List<String> {
         if (byFreq.isEmpty()) return emptyList()
         val t = token.lowercase()
         if (t.isEmpty()) return emptyList()
         val found = LinkedHashSet<String>()
-        for (p in personal) if (p.startsWith(t)) found.add(p)
+        // 1) completions de prefix (encara que el token sigui paraula vàlida)
         addPrefix(t, found, limit * 6)
         found.remove(t)
+        // 2-4) només si el token NO és una paraula (correcció d'errors)
         if (!isWord(t)) {
             if (found.size < limit) {
                 var seen = 0
@@ -150,13 +101,11 @@ object SpellEngine {
             }
             found.remove(t)
         }
-        val base = byFreq.filter { found.contains(it) }
-        val pers = personal.filter { it.startsWith(t) && !base.contains(it) }
-        return (pers + base).take(limit)
+        return byFreq.filter { found.contains(it) }.take(limit)
     }
 
     private fun neighbors(t: String): List<String> {
-        val letters = "abcdefghijklmnopqrstuvwxyzàèéíòóúüçñ-'"
+        val letters = "abcdefghijklmnopqrstuvwxyzàèéíòóúüçñ"
         val out = ArrayList<String>()
         for (i in t.indices) out.add(t.removeRange(i, i + 1))
         for (i in 0 until t.length - 1)
@@ -169,22 +118,22 @@ object SpellEngine {
     }
 
     private fun lowerBound(prefix: String): Int {
-        val ba = byAlpha
         var lo = 0
-        var hi = ba.size
+        var hi = byAlpha.size
         while (lo < hi) {
             val mid = (lo + hi) / 2
-            if (ba[mid] < prefix) lo = mid + 1 else hi = mid
+            if (byAlpha[mid] < prefix) lo = mid + 1 else hi = mid
         }
         return lo
     }
 
     private fun addPrefix(prefix: String, out: LinkedHashSet<String>, max: Int) {
-        val ba = byAlpha
         var i = lowerBound(prefix)
         var added = 0
-        while (i < ba.size && ba[i].startsWith(prefix) && added < max) {
-            out.add(ba[i]); i++; added++
+        while (i < byAlpha.size && byAlpha[i].startsWith(prefix) && added < max) {
+            out.add(byAlpha[i])
+            i++
+            added++
         }
     }
 }

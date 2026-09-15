@@ -1,0 +1,32 @@
+From d4275c0baa01515e12202745618c1ddb22d2ca61 Mon Sep 17 00:00:00 2001
+From: Aleix <4leix@proton.me>
+Date: Tue, 15 Sep 2026 21:47:38 +0200
+Subject: [PATCH] WIP pre-rollback: C2 integrat + edits de containment
+
+---
+ .../main/java/com/aleix/thumbgridtest/MainActivity.kt    | 9 +--------
+ 1 file changed, 1 insertion(+), 8 deletions(-)
+
+diff --git a/app/src/main/java/com/aleix/thumbgridtest/MainActivity.kt b/app/src/main/java/com/aleix/thumbgridtest/MainActivity.kt
+index e9a9bb1..788e87d 100644
+--- a/app/src/main/java/com/aleix/thumbgridtest/MainActivity.kt
++++ b/app/src/main/java/com/aleix/thumbgridtest/MainActivity.kt
+@@ -536,14 +536,7 @@ class MainActivity : AppCompatActivity() {
+ 
+     override fun onResume() {
+         super.onResume()
+-        val now = SystemClock.uptimeMillis()
+-        if (now - lastReloadMs < 1000L) return
+-        lastReloadMs = now
+-        try {
+-            if (::dualGridView.isInitialized) dualGridView.reloadPrefs()
+-        } catch (e: Exception) {
+-            Log.e("ThumbGrid", "reloadPrefs a onResume ha fallat", e)
+-        }
++        // app de proves: sense recarrega en viu; els canvis s'apliquen en reobrir o via IME
+     }
+ }
+ class SettingsActivity : AppCompatActivity() {
+-- 
+2.55.0
+
