@@ -9,7 +9,7 @@
     <string name="switch_corrector">Enable spell corrector</string>
     <string name="switch_autocorrect_space">Autocorrect on space tap</string>
     <string name="slider_confidence">Minimum confidence to autocorrect</string>
-    <string name="switch_undo_correction">After an autocorrect, backspace removes the whole word</string>
+    <string name="switch_undo_correction">When deleting right after an autocorrection, undo it and restore what you had typed</string>
     <string name="btn_blacklist">Words never autocorrected</string>
     <string name="blacklist_title">Words that are never autocorrected</string>
     <string name="blacklist_hint">Comma separated</string>

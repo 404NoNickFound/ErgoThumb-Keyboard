@@ -9,7 +9,7 @@
     <string name="switch_corrector">Activa el corrector ortográfico</string>
     <string name="switch_autocorrect_space">Autocorrección al tocar el espacio</string>
     <string name="slider_confidence">Confianza mínima para autocorregir</string>
-    <string name="switch_undo_correction">Al borrar tras una autocorrección, borra toda la palabra</string>
+    <string name="switch_undo_correction">Al borrar justo después de una autocorrección, desházla y restaura lo que habías escrito</string>
     <string name="btn_blacklist">Palabras sin autocorrección</string>
     <string name="blacklist_title">Palabras que nunca se autocregirán</string>
     <string name="blacklist_hint">Separadas por comas</string>

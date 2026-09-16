@@ -1276,6 +1276,8 @@ class DualGridView(context: Context) : View(context) {
     // --- Corrector (C1) ---
     private var suggestions: List<String> = emptyList()
     private var pendingUndoLen = 0
+    private var lastAutocorrect: Pair<String, String>? = null
+    private val rejectedCorrections = mutableSetOf<String>()
     private var correctorOn = Prefs.corrector(context)
     private var autocorrectSpace = Prefs.autocorrectSpace(context)
     private var confidenceMin = Prefs.confidence(context)
@@ -1378,7 +1380,10 @@ class DualGridView(context: Context) : View(context) {
         blacklist = Prefs.blacklist(context)
         learned = Prefs.learned(context)
         learned = Prefs.learned(context)
-        SpellEngine.load(context, lang)
+        SpellEngine.loadAsync(context, lang) {
+            refreshSuggestions()
+            invalidate()
+        }
         refreshSuggestions()
         scale = (resources.displayMetrics.widthPixels /
                 resources.displayMetrics.density) / 430f
@@ -1471,7 +1476,7 @@ class DualGridView(context: Context) : View(context) {
     // --- Corrector (C1): token actual, suggeriments, autocorrecció i esborrat per paraula ---
     private fun currentToken(): String {
         val before = textTarget?.peekBefore(64) ?: return ""
-        val delims = " \n\t.,;:!?()\"'«»"
+        val delims = " \n\t.,;:!?()\"«»"
         var idx = -1
         for (i in before.indices) if (before[i] in delims) idx = i
         return if (idx < 0) before else before.substring(idx + 1)
@@ -1511,38 +1516,50 @@ class DualGridView(context: Context) : View(context) {
     private fun applySuggestion(word: String) {
         val token = currentToken()
         if (token.isEmpty()) return
+        lastAutocorrect = null
+        if (word == token.lowercase()) return
         Prefs.putLearned(context, token.lowercase(), word.lowercase())
         learned = Prefs.learned(context)
         repeat(token.length) { textTarget?.deleteBefore() }
         val formatted = if (token[0].isUpperCase())
             word.replaceFirstChar { it.uppercase() } else word
         textTarget?.commit(formatted)
+        textTarget?.commit(" ")
         undoStack.clear()
         pendingUndoLen = 0
         refreshSuggestions()
         invalidate()
     }
 
-    private fun maybeAutocorrect() {
-        if (!correctorOn || !autocorrectSpace) return
+    private fun maybeAutocorrect(): Boolean {
+        if (!correctorOn || !autocorrectSpace) return false
         val tok = currentToken()
-        if (tok.length < 2) return
+        if (tok.length < 2) return false
         val low = tok.lowercase()
-        if (blacklist.contains(low)) return
-        val learnedTarget = learned[low]
-        if (learnedTarget != null) {
-            replaceToken(tok, learnedTarget)
-            return
+        if (blacklist.contains(low) || rejectedCorrections.contains(low)) return false
+        val target: String? = if (learned.containsKey(low)) learned[low]
+        else if (SpellEngine.isWord(low)) SpellEngine.accentBetter(low)
+        else {
+            val comps = SpellEngine.compoundForms(low)
+            if (comps.size == 1) comps[0]
+            else {
+                val cand = SpellEngine.candidates(tok, 1).firstOrNull()?.takeIf { it != low }
+                if (cand != null && SpellEngine.confidence(cand) * 100f >= confidenceMin) cand else null
+            }
         }
-        val top: String = if (SpellEngine.isWord(low)) {
-            SpellEngine.accentBetter(low) ?: return
-        } else {
-            val c = SpellEngine.candidates(tok, 1).firstOrNull() ?: return
-            if (c == low) return
-            c
-        }
-        if (SpellEngine.confidence(top) * 100f < confidenceMin) return
-        replaceToken(tok, top)
+        if (target == null || target == low) return false
+        if (blacklist.contains(target)) return false
+        repeat(tok.length) { textTarget?.deleteBefore() }
+        val formatted = if (tok[0].isUpperCase())
+            target.replaceFirstChar { it.uppercase() } else target
+        textTarget?.commit(formatted)
+        textTarget?.commit(" ")
+        tutEvent?.invoke("commit: ")
+        undoStack.clear()
+        lastAutocorrect = low to formatted
+        pendingUndoLen = 0
+        refreshSuggestions()
+        return true
     }
 
     private fun replaceToken(tok: String, target: String) {
@@ -1555,17 +1572,15 @@ class DualGridView(context: Context) : View(context) {
     }
 
     private fun deleteOneUnit(): String {
-        if (pendingUndoLen > 0 && undoWhole) {
-            val sb = StringBuilder()
-            repeat(pendingUndoLen) {
-                val ch = textTarget?.deleteBefore() ?: ""
-                if (ch.isEmpty()) return@repeat
-                sb.insert(0, ch)
+        if (undoWhole) {
+            lastAutocorrect?.let { (orig, formatted) ->
+                lastAutocorrect = null
+                rejectedCorrections.add(orig)
+                repeat(formatted.length + 1) { textTarget?.deleteBefore() }
+                textTarget?.commit(orig)
+                refreshSuggestions()
+                return orig
             }
-            pendingUndoLen = 0
-            val whole = sb.toString()
-            if (whole.isNotEmpty()) undoStack.addLast(whole)
-            return whole
         }
         val ch = textTarget?.deleteBefore() ?: ""
         if (ch.isNotEmpty()) undoStack.addLast(ch)
@@ -1648,6 +1663,12 @@ class DualGridView(context: Context) : View(context) {
         lang = enabled[(idx + 1) % enabled.size]
         layout = Layouts.forLang(lang)
         Prefs.setLang(context, lang)
+        refreshLocContext()
+        suggestions = emptyList()
+        SpellEngine.loadAsync(context, lang) {
+            refreshSuggestions()
+            invalidate()
+        }
         onLangChanged?.invoke()
         tutEvent?.invoke("lang")
         kickAnim()
@@ -1676,10 +1697,17 @@ class DualGridView(context: Context) : View(context) {
             if (upper) out = out.uppercase()
             if (shiftMode == ShiftMode.ONCE) shiftMode = ShiftMode.OFF
         }
+        if (out.length == 1 && out[0] in autoSpaceChars) {
+            val b2 = textTarget?.peekBefore(2) ?: ""
+            if (b2.length == 2 && b2[1] == ' ' && b2[0] in autoSpaceChars) {
+                textTarget?.deleteBefore()
+            }
+        }
         textTarget?.commit(out)
         if (autoSpace && out.length == 1 && out[0] in autoSpaceChars) {
             textTarget?.commit(" ")
         }
+        lastAutocorrect = null
         undoStack.clear()
         if (bigramsEnabled && !sensitiveField && !tutorialMode &&
             out.length == 1 && out[0].isLetter()) {
@@ -2541,6 +2569,12 @@ class DualGridView(context: Context) : View(context) {
                                     state.eraseAcc -= n
                                     repeat(n) {
                                         if (erasePaused()) return@repeat
+                                        if (state.deleted == 0 && undoWhole && lastAutocorrect != null) {
+                                            deleteOneUnit()
+                                            state.deleted++
+                                            tutEvent?.invoke("delete")
+                                            return@repeat
+                                        }
                                         val ch = textTarget?.deleteBefore() ?: ""
                                         if (ch.isNotEmpty()) {
                                             undoStack.addLast(ch); state.deleted++
@@ -2717,14 +2751,17 @@ class DualGridView(context: Context) : View(context) {
 
             Zone.SPACE -> when (dir) {
                 SwipeDir.TAP -> {
-                    maybeAutocorrect()
-                    val b = textTarget?.peekBefore(2) ?: ""
-                    val blocked = autoSpace && b.length == 2 && b[1] == ' ' && b[0] in autoSpaceChars
-                    if (!blocked) {
-                        textTarget?.commit(" ")
-                        tutEvent?.invoke("commit: ")
-                        undoStack.clear()
-                        spawnFeedback(null, 0, 0, true, "␣")
+                    val applied = maybeAutocorrect()
+                    if (!applied) {
+                        val b = textTarget?.peekBefore(2) ?: ""
+                        val blocked = autoSpace && b.length == 2 && b[1] == ' ' && b[0] in autoSpaceChars
+                        if (!blocked) {
+                            textTarget?.commit(" ")
+                            tutEvent?.invoke("commit: ")
+                            undoStack.clear()
+                            lastAutocorrect = null
+                            spawnFeedback(null, 0, 0, true, "␣")
+                        }
                     }
                 }
                 SwipeDir.W -> {
