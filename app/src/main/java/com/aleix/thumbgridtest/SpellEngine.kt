@@ -113,10 +113,8 @@ object SpellEngine {
         }
         return null
     }
-
     private fun isValidRight(x: String): Boolean =
-        words.contains(x) || cliticForm(x.replace("'", "")) == x
-
+        words.contains(x) || x in CLITIC_RIGHT || cliticForm(x.replace("'", "")) == x
     fun isCompoundForm(w: String): Boolean {
         if ('-' in w) {
             val parts = w.split("-")
@@ -127,15 +125,18 @@ object SpellEngine {
         return false
     }
 
+    private val CLITIC_RIGHT = listOf("me", "te", "se", "hi", "li", "els", "les", "nos", "vos")
+
     fun compoundForms(t: String): List<String> {
         val out = ArrayList<String>(3)
         for (i in 1 until t.length - 1) {
             val a = t.substring(0, i)
             val b = t.substring(i)
-            if (words.contains(a)) {
-                val cf = cliticForm(b)
-                if (cf != null) out.add("$a-$cf")
-                else if (words.contains(b)) out.add("$a-$b")
+            if (!words.contains(a)) continue
+            val cf = cliticForm(b)
+            when {
+                cf != null -> out.add("$a-$cf")
+                b in CLITIC_RIGHT -> out.add("$a-$b")
             }
         }
         cliticForm(t)?.let { out.add(it) }
@@ -151,6 +152,18 @@ object SpellEngine {
     fun accentBetter(token: String): String? {
         val target = unaccent[token] ?: return null
         return if (freqOf(target) > freqOf(token) * 3) target else null
+    }
+    fun autocorrectTarget(token: String, confidenceMin: Float): String? {
+        val t = token.lowercase()
+        if (t.length < 2) return null
+        if (isWord(t)) {
+            val a = accentBetter(t) ?: return null
+            return if (confidence(a) * 100f >= confidenceMin) a else null
+        }
+        val comps = compoundForms(t)
+        if (comps.size == 1) return comps[0]
+        val cand = candidates(t, 3).firstOrNull()?.takeIf { it != t } ?: return null
+        return if (confidence(cand) * 100f >= confidenceMin) cand else null
     }
 
     private const val ACCENTED = "àáâäãèéêëìíîïòóôöõøùúûüçñÀÁÂÄÃÈÉÊËÌÍÎÏÒÓÔÖÕØÙÚÛÜÇÑ"
@@ -174,6 +187,7 @@ object SpellEngine {
         addPrefix(t, found, limit * 6)
         found.remove(t)
         if (!isWord(t)) {
+            found.addAll(compoundForms(t))
             if (found.size < limit) {
                 var seen = 0
                 for (n in neighbors(t)) {
@@ -191,9 +205,6 @@ object SpellEngine {
             }
             if (found.size < limit) {
                 for (n in neighbors(t)) if (n != t && words.contains(n)) found.add(n)
-            }
-            if (found.size < limit) {
-                found.addAll(compoundForms(t))
             }
             found.remove(t)
         }

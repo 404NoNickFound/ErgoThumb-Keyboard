@@ -1488,16 +1488,14 @@ class DualGridView(context: Context) : View(context) {
         val low = tok.lowercase()
         val base = ArrayList<String>(3)
         if (tok.length >= 2) {
-            learned[low]?.let { if (!blacklist.contains(it)) base.add(it) }
-            SpellEngine.accentBetter(low)?.let {
-                if (!base.contains(it) && !blacklist.contains(it)) base.add(it)
+            val applied = if (autocorrectSpace) pendingTarget(tok, low) else null
+            val cands = SpellEngine.candidates(tok, 3).toMutableList()
+            cands.removeAll { blacklist.contains(it) }
+            if (applied != null) {
+                cands.remove(applied)
+                cands.add(0, applied)
             }
-            if (base.size < 3) {
-                for (c in SpellEngine.candidates(tok, 3)) {
-                    if (!base.contains(c) && !blacklist.contains(c)) base.add(c)
-                    if (base.size >= 3) break
-                }
-            }
+            base.addAll(cands.take(3))
             if (base.isEmpty()) base.add(low)
         }
         val clip = if (context is InputMethodService)
@@ -1532,23 +1530,9 @@ class DualGridView(context: Context) : View(context) {
     }
 
     private fun maybeAutocorrect(): Boolean {
-        if (!correctorOn || !autocorrectSpace) return false
         val tok = currentToken()
-        if (tok.length < 2) return false
         val low = tok.lowercase()
-        if (blacklist.contains(low) || rejectedCorrections.contains(low)) return false
-        val target: String? = if (learned.containsKey(low)) learned[low]
-        else if (SpellEngine.isWord(low)) SpellEngine.accentBetter(low)
-        else {
-            val comps = SpellEngine.compoundForms(low)
-            if (comps.size == 1) comps[0]
-            else {
-                val cand = SpellEngine.candidates(tok, 1).firstOrNull()?.takeIf { it != low }
-                if (cand != null && SpellEngine.confidence(cand) * 100f >= confidenceMin) cand else null
-            }
-        }
-        if (target == null || target == low) return false
-        if (blacklist.contains(target)) return false
+        val target = pendingTarget(tok, low) ?: return false
         repeat(tok.length) { textTarget?.deleteBefore() }
         val formatted = if (tok[0].isUpperCase())
             target.replaceFirstChar { it.uppercase() } else target
@@ -1560,6 +1544,14 @@ class DualGridView(context: Context) : View(context) {
         pendingUndoLen = 0
         refreshSuggestions()
         return true
+    }
+
+    private fun pendingTarget(tok: String, low: String): String? {
+        if (!correctorOn || !autocorrectSpace) return null
+        if (tok.length < 2) return null
+        if (blacklist.contains(low) || rejectedCorrections.contains(low)) return null
+        learned[low]?.let { if (it != low && !blacklist.contains(it)) return it }
+        return SpellEngine.autocorrectTarget(tok, confidenceMin)
     }
 
     private fun replaceToken(tok: String, target: String) {
