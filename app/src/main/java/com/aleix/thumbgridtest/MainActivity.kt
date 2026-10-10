@@ -171,6 +171,52 @@ object Prefs {
             m.entries.joinToString(",") { e -> e.key + ">" + e.value }
         ).apply()
     }
+    const val KEY_CLIPHIST = "clip_history"
+    const val KEY_CLIPHIST_ON = "clip_history_enabled"
+    private const val CLIP_SEP = ""
+    private const val ENTRY_SEP = ""
+    private const val CLIP_TTL_MS = 3_600_000L
+
+    fun clipHistOn(ctx: Context) = prefs(ctx).getBoolean(KEY_CLIPHIST_ON, true)
+
+    fun clipHistory(ctx: Context): List<Pair<Long, String>> {
+        val raw = prefs(ctx).getString(KEY_CLIPHIST, "") ?: ""
+        if (raw.isEmpty()) return emptyList()
+        return raw.split(ENTRY_SEP).mapNotNull { e ->
+            val i = e.indexOf(CLIP_SEP)
+            if (i <= 0) null else (e.substring(0, i).toLongOrNull() ?: 0L) to e.substring(i + 1)
+        }
+    }
+
+    private fun saveClipHistory(ctx: Context, list: List<Pair<Long, String>>) {
+        prefs(ctx).edit().putString(KEY_CLIPHIST,
+            list.joinToString(ENTRY_SEP) { "${it.first}$CLIP_SEP${it.second}" }).apply()
+    }
+
+    fun pruneClipHistory(ctx: Context) {
+        val now = System.currentTimeMillis()
+        val all = clipHistory(ctx)
+        val kept = all.filter { now - it.first <= CLIP_TTL_MS }
+        if (kept.size != all.size) saveClipHistory(ctx, kept)
+    }
+
+    fun addClipEntry(ctx: Context, text: String) {
+        val t = text.replace("\n", " ").trim()
+        if (t.isEmpty()) return
+        val list = clipHistory(ctx).filter { it.second != t }.toMutableList()
+        list.add(0, System.currentTimeMillis() to t)
+        saveClipHistory(ctx, list.take(20))
+    }
+
+    fun touchClipEntry(ctx: Context, text: String) {
+        val list = clipHistory(ctx).toMutableList()
+        val i = list.indexOfFirst { it.second == text }
+        if (i >= 0) { list[i] = System.currentTimeMillis() to text; saveClipHistory(ctx, list) }
+    }
+
+    fun removeClipEntry(ctx: Context, text: String) {
+        saveClipHistory(ctx, clipHistory(ctx).filter { it.second != text })
+    }
 
     fun langs(ctx: Context): List<String> =
         (prefs(ctx).getString(KEY_LANGS, "ca,es,en") ?: "ca,es,en")
@@ -600,7 +646,8 @@ class SettingsActivity : AppCompatActivity() {
             text = getString(R.string.btn_blacklist)
             setOnClickListener { showBlacklist() }
         })
-
+        mSwitch(R.string.switch_cliphist, Prefs.clipHistOn(this))
+        { putB(Prefs.KEY_CLIPHIST_ON, it) }
         root.addView(TextView(this).apply {
             text = getString(R.string.settings_note)
             textSize = 13f
@@ -1287,6 +1334,18 @@ class DualGridView(context: Context) : View(context) {
     private val clipMgr = context.getSystemService(Context.CLIPBOARD_SERVICE)
             as android.content.ClipboardManager
     private var clipFull = ""
+    private var clipHistOn = Prefs.clipHistOn(context)
+    private var clipMenuOpen = false
+    private val clipListener = android.content.ClipboardManager.OnPrimaryClipChangedListener {
+        if (clipHistOn && context is InputMethodService) {
+            val txt = clipMgr.primaryClip?.takeIf { it.itemCount > 0 }
+                ?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty()
+            if (txt.isNotBlank()) {
+                Prefs.pruneClipHistory(context)
+                Prefs.addClipEntry(context, txt)
+            }
+        }
+    }
     private var locContext: Context = context
 
     private fun refreshLocContext() {
@@ -1377,8 +1436,8 @@ class DualGridView(context: Context) : View(context) {
         autocorrectSpace = Prefs.autocorrectSpace(context)
         confidenceMin = Prefs.confidence(context)
         undoWhole = Prefs.undoWhole(context)
+        clipHistOn = Prefs.clipHistOn(context)
         blacklist = Prefs.blacklist(context)
-        learned = Prefs.learned(context)
         learned = Prefs.learned(context)
         SpellEngine.loadAsync(context, lang) {
             refreshSuggestions()
@@ -1406,6 +1465,7 @@ class DualGridView(context: Context) : View(context) {
         caseAnimStart = -1L
         caseInitialized = false
         barP = barTarget
+        if (context is InputMethodService) clipMgr.addPrimaryClipChangedListener(clipListener)
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
@@ -1424,6 +1484,7 @@ class DualGridView(context: Context) : View(context) {
         super.onDetachedFromWindow()
         activePointers.keys.toList().forEach { stopEdgeRepeat(it) }
         handler.removeCallbacks(animLoop)
+        if (context is InputMethodService) clipMgr.removePrimaryClipChangedListener(clipListener)
     }
 
     private fun cubicOut(t: Float): Float {
@@ -1509,6 +1570,16 @@ class DualGridView(context: Context) : View(context) {
         suggestions = if (base.all { it.isEmpty() } && third.isEmpty()) emptyList()
         else listOf(base.getOrElse(1) { "" }, base.getOrElse(0) { "" }, third)
         Log.d("ThumbGrid", "sugg tok='$tok' n=${suggestions.count { it.isNotEmpty() }} dict=${SpellEngine.size()}")
+    }
+    private fun clipMenuRect(): RectF {
+        val g = geo()
+        return RectF(g.contentLeft + px(8f), g.sugH + px(8f),
+            g.contentLeft + g.contentWidth - px(8f), g.capsuleTop - px(8f))
+    }
+
+    private fun clipMenuRows(): List<String> {
+        Prefs.pruneClipHistory(context)
+        return Prefs.clipHistory(context).map { it.second }.take(6)
     }
 
     private fun applySuggestion(word: String) {
@@ -2417,6 +2488,32 @@ class DualGridView(context: Context) : View(context) {
         }
 
         if (symbolLayer) drawSymbolLayer(canvas, g)
+        if (clipMenuOpen) {
+            val r = clipMenuRect()
+            val rows = clipMenuRows()
+            keycapPaint.color = blendColor(theme.role[Themes.BG], theme.pole, 0.35f)
+            canvas.drawRoundRect(r, px(16f), px(16f), keycapPaint)
+            val rowH = r.height() / 6f
+            textPaint.textAlign = Paint.Align.LEFT
+            for (i in 0 until 6) {
+                val y = r.top + rowH * i
+                if (i < rows.size) {
+                    textPaint.color = theme.text
+                    textPaint.textSize = px(14f)
+                    textPaint.typeface = fontRegular
+                    val yC = -(textPaint.descent() + textPaint.ascent()) / 2f
+                    canvas.drawText(rows[i].take(40), r.left + px(12f), y + rowH / 2f + yC, textPaint)
+                    drawIcon(canvas, Icon.BACK, r.right - px(24f), y + rowH / 2f, px(14f))
+                }
+                if (i < 5) {
+                    tickPaint.color = theme.hint
+                    tickPaint.alpha = 60
+                    canvas.drawLine(r.left + px(8f), y + rowH, r.right - px(8f), y + rowH, tickPaint)
+                    tickPaint.alpha = 255
+                }
+            }
+            textPaint.textAlign = Paint.Align.CENTER
+        }
 
         if (caseAnimStart >= 0L && caseT >= 1f) caseAnimStart = -1L
         if (anyAnimActive(now)) kickAnim()
@@ -2428,7 +2525,37 @@ class DualGridView(context: Context) : View(context) {
         val g = geo()
         val edgeZone = 24 * resources.displayMetrics.density
         val now = SystemClock.uptimeMillis()
-
+        if (clipMenuOpen) {
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> return true
+                MotionEvent.ACTION_UP -> {
+                    val x = event.getX(0); val y = event.getY(0)
+                    val r = clipMenuRect()
+                    val rows = clipMenuRows()
+                    val rowH = r.height() / 6f
+                    if (r.contains(x, y) && rows.isNotEmpty()) {
+                        val idx = ((y - r.top) / rowH).toInt()
+                        if (idx in rows.indices) {
+                            val word = rows[idx]
+                            if (x > r.right - px(48f)) {
+                                Prefs.removeClipEntry(context, word)
+                            } else {
+                                textTarget?.commit(word)
+                                Prefs.touchClipEntry(context, word)
+                                undoStack.clear()
+                                clipMenuOpen = false
+                                refreshSuggestions()
+                            }
+                        }
+                    } else {
+                        clipMenuOpen = false
+                    }
+                    invalidate()
+                    return true
+                }
+                else -> return true
+            }
+        }
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
                 val index = event.actionIndex
@@ -2667,17 +2794,13 @@ class DualGridView(context: Context) : View(context) {
 
         when (state.zone) {
             Zone.SUGGEST -> {
-                if (dir != SwipeDir.TAP) return
-                val candIdx = when (state.cellIndex) { 0 -> 1; 1 -> 0; else -> 2 }
-                if (candIdx == 2 && clipFull.isNotEmpty() && currentToken().isEmpty()) {
-                    textTarget?.commit(clipFull)
-                    undoStack.clear()
-                    refreshSuggestions()
+                if (dir == SwipeDir.S && state.cellIndex == 2 && clipHistOn) {
+                    Prefs.pruneClipHistory(context)
+                    clipMenuOpen = true
                     invalidate()
                     return
                 }
-                val word = suggestions.getOrElse(candIdx) { "" }
-                if (word.isNotEmpty()) applySuggestion(word)
+                if (dir != SwipeDir.TAP) return
             }
 
             Zone.SYMBOL -> {
