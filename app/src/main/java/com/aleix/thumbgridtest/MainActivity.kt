@@ -1568,7 +1568,7 @@ class DualGridView(context: Context) : View(context) {
             (if (clip.length > 14) clip.take(14) + "…" else clip)
         else base.getOrElse(2) { "" }
         suggestions = if (base.all { it.isEmpty() } && third.isEmpty()) emptyList()
-        else listOf(base.getOrElse(1) { "" }, base.getOrElse(0) { "" }, third)
+        else listOf(base.getOrElse(0) { "" }, base.getOrElse(1) { "" }, third)
         Log.d("ThumbGrid", "sugg tok='$tok' n=${suggestions.count { it.isNotEmpty() }} dict=${SpellEngine.size()}")
     }
     private fun clipMenuRect(): RectF {
@@ -2801,6 +2801,17 @@ class DualGridView(context: Context) : View(context) {
                     return
                 }
                 if (dir != SwipeDir.TAP) return
+                val candIdx = when (state.cellIndex) { 0 -> 1; 1 -> 0; else -> 2 }
+                if (candIdx == 2 && clipFull.isNotEmpty() && currentToken().isEmpty()) {
+                    textTarget?.commit(clipFull)
+                    Prefs.touchClipEntry(context, clipFull)
+                    undoStack.clear()
+                    refreshSuggestions()
+                    invalidate()
+                    return
+                }
+                val word = suggestions.getOrElse(candIdx) { "" }
+                if (word.isNotEmpty()) applySuggestion(word)
             }
 
             Zone.SYMBOL -> {

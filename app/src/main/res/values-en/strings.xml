@@ -1,4 +1,5 @@
 <resources>
+    <string name="app_name">ErgoThumb</string>
     <string name="switch_nextword">Next-word prediction (local learning)</string>
     <string name="switch_cliphist">Clipboard history (expires after 1 h unused)</string>
     <string name="nextword_warning_title">Before enabling prediction</string>
@@ -53,7 +54,6 @@
     </string-array>
     <string name="gate_title">Enable the keyboard first</string>
     <string name="gate_desc">The tutorial (and the keyboard) need you to enable ThumbGridTest in the system keyboard settings. Do it and come back here to continue; the tutorial will unlock itself.</string>
-    <string name="app_name">ThumbGridTest</string>
     <string name="subtype_ca">Català</string>
     <string name="subtype_es">Castellano</string>
     <string name="subtype_en">English</string>

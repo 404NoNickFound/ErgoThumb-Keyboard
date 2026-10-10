@@ -1,4 +1,5 @@
 <resources>
+    <string name="app_name">ErgoThumb</string>
     <string name="switch_nextword">Predicció de paraula següent (aprenentatge local)</string>
     <string name="switch_cliphist">Historial del portapapers (caduca en 1 h sense ús)</string>
     <string name="nextword_warning_title">Abans d\'activar la predicció</string>
@@ -53,7 +54,6 @@
     </string-array>
     <string name="gate_title">Activa el teclat primer</string>
     <string name="gate_desc">El tutorial (i el teclat) necessiten que activis ThumbGridTest als ajustos de teclats del sistema. Fes-ho i torna aquí per continuar; el tutorial es desbloquejarà sol.</string>
-    <string name="app_name">ThumbGridTest</string>
     <string name="subtype_ca">Català</string>
     <string name="subtype_es">Castellano</string>
     <string name="subtype_en">English</string>
