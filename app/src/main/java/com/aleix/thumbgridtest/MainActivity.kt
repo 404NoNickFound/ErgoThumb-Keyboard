@@ -238,6 +238,7 @@ object Prefs {
     private const val CLIP_SEP = ""
     private const val ENTRY_SEP = ""
     private const val CLIP_TTL_MS = 3_600_000L
+    private const val KEY_CLIPSUPPRESSED = "clip_suppressed"
 
     fun clipHistOn(ctx: Context) = prefs(ctx).getBoolean(KEY_CLIPHIST_ON, true)
 
@@ -265,9 +266,29 @@ object Prefs {
     fun addClipEntry(ctx: Context, text: String) {
         val t = text.replace("\n", " ").trim()
         if (t.isEmpty()) return
+        unsuppressClip(ctx, t)
         val list = clipHistory(ctx).filter { it.second != t }.toMutableList()
         list.add(0, System.currentTimeMillis() to t)
         saveClipHistory(ctx, list.take(20))
+    }
+
+    fun clipSuppressed(ctx: Context): List<String> =
+        (prefs(ctx).getString(KEY_CLIPSUPPRESSED, "") ?: "")
+            .split(ENTRY_SEP).filter { it.isNotEmpty() }
+
+    fun suppressClip(ctx: Context, text: String) {
+        val cur = clipSuppressed(ctx).filter { it != text }.toMutableList()
+        cur.add(text)
+        prefs(ctx).edit().putString(KEY_CLIPSUPPRESSED,
+            cur.takeLast(20).joinToString(ENTRY_SEP)).apply()
+    }
+
+    private fun unsuppressClip(ctx: Context, text: String) {
+        val before = clipSuppressed(ctx)
+        val cur = before.filter { it != text }
+        if (cur.size != before.size)
+            prefs(ctx).edit().putString(KEY_CLIPSUPPRESSED,
+                cur.joinToString(ENTRY_SEP)).apply()
     }
 
     fun touchClipEntry(ctx: Context, text: String) {
@@ -278,6 +299,7 @@ object Prefs {
 
     fun removeClipEntry(ctx: Context, text: String) {
         saveClipHistory(ctx, clipHistory(ctx).filter { it.second != text })
+        suppressClip(ctx, text)
     }
 
     fun langs(ctx: Context): List<String> =
@@ -1442,6 +1464,8 @@ class DualGridView(context: Context) : View(context) {
             if (txt.isNotBlank()) {
                 Prefs.pruneClipHistory(context)
                 Prefs.addClipEntry(context, txt)
+                refreshSuggestions()
+                invalidate()
             }
         }
     }
@@ -1569,7 +1593,10 @@ class DualGridView(context: Context) : View(context) {
         caseInitialized = false
         barP = barTarget
         resetOverlays()
-        if (context is InputMethodService) clipMgr.addPrimaryClipChangedListener(clipListener)
+        if (context is InputMethodService) {
+            clipMgr.addPrimaryClipChangedListener(clipListener)
+            syncClipFromSystem()
+        }
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
@@ -1665,9 +1692,8 @@ class DualGridView(context: Context) : View(context) {
         } else if (tok.isEmpty()) {
             base.addAll(nextWordCands)
         }
-        val clip = if (context is InputMethodService)
-            (clipMgr.primaryClip?.takeIf { it.itemCount > 0 }
-                ?.getItemAt(0)?.coerceToText(context)?.toString()?.trim()).orEmpty()
+        val clip = if (clipHistOn && context is InputMethodService)
+            (Prefs.clipHistory(context).firstOrNull()?.second).orEmpty()
         else ""
         clipFull = clip
         val third = if (tok.isEmpty() && clip.isNotEmpty())
@@ -1710,6 +1736,20 @@ class DualGridView(context: Context) : View(context) {
         sugManagePointer = -1
         invalidate()
     }
+    private fun syncClipFromSystem() {
+        if (!clipHistOn || context !is InputMethodService) return
+        val txt = (clipMgr.primaryClip?.takeIf { it.itemCount > 0 }
+            ?.getItemAt(0)?.coerceToText(context)?.toString() ?: "")
+            .replace("\n", " ").trim()
+        if (txt.isEmpty()) return
+        if (Prefs.clipSuppressed(context).contains(txt)) return
+        if (Prefs.clipHistory(context).firstOrNull()?.second == txt) return
+        Prefs.pruneClipHistory(context)
+        Prefs.addClipEntry(context, txt)
+        refreshSuggestions()
+        invalidate()
+    }
+
     private fun tryOpenClipMenu(justOpened: Boolean) {
         Prefs.pruneClipHistory(context)
         if (clipMenuRows().isEmpty()) return
@@ -2737,6 +2777,7 @@ class DualGridView(context: Context) : View(context) {
                             val word = rows[idx]
                             if (x > r.right - px(48f)) {
                                 Prefs.removeClipEntry(context, word)
+                                refreshSuggestions()
                                 if (clipMenuRows().isEmpty()) clipMenuOpen = false
                             } else {
                                 textTarget?.commit(word)
