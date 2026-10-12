@@ -1337,7 +1337,8 @@ class ThumbImeService : InputMethodService() {
             Prefs.setOnboarded(this, true)
         }
         gridView?.reloadPrefs()
-        gridView?.sensitiveField = isSensitiveField(info)
+        gridView?.sensitiveField = isPasswordField(info)
+        gridView?.noLearnField = isNoLearnField(info)
         publishSubtype()
         Handler(Looper.getMainLooper()).postDelayed({ publishSubtype() }, 600)
     }
@@ -1352,21 +1353,33 @@ class ThumbImeService : InputMethodService() {
         gridView?.invalidate()
     }
 
-    private fun isSensitiveField(info: EditorInfo?): Boolean {
+    private fun isPasswordField(info: EditorInfo?): Boolean {
         val type = info?.inputType ?: return false
         val cls = type and InputType.TYPE_MASK_CLASS
         val variation = type and InputType.TYPE_MASK_VARIATION
-        val textSensitive = cls == InputType.TYPE_CLASS_TEXT && (
+        val textPw = cls == InputType.TYPE_CLASS_TEXT && (
                 variation == InputType.TYPE_TEXT_VARIATION_PASSWORD ||
                         variation == InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD ||
-                        variation == InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD ||
-                        variation == InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS ||
+                        variation == InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD
+                )
+        val numPw = cls == InputType.TYPE_CLASS_NUMBER &&
+                variation == InputType.TYPE_NUMBER_VARIATION_PASSWORD
+        return textPw || numPw
+    }
+
+    private fun isNoLearnField(info: EditorInfo?): Boolean {
+        if (isPasswordField(info)) return true
+        val type = info?.inputType ?: return false
+        val cls = type and InputType.TYPE_MASK_CLASS
+        val variation = type and InputType.TYPE_MASK_VARIATION
+        val textNoLearn = cls == InputType.TYPE_CLASS_TEXT && (
+                variation == InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS ||
                         variation == InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS ||
                         variation == InputType.TYPE_TEXT_VARIATION_URI
                 )
-        val numberSensitive = cls == InputType.TYPE_CLASS_NUMBER &&
-                variation == InputType.TYPE_NUMBER_VARIATION_PASSWORD
-        return textSensitive || numberSensitive
+        val flagNoLearn = (info.imeOptions and
+                EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING) != 0
+        return textNoLearn || flagNoLearn
     }
 }
 
@@ -1374,6 +1387,7 @@ class DualGridView(context: Context) : View(context) {
 
     var textTarget: TextTarget? = null
     var sensitiveField = false
+    var noLearnField = false
     var onLangChanged: (() -> Unit)? = null
     var tutorialMode = false
     var tutEvent: ((String) -> Unit)? = null
@@ -1510,7 +1524,7 @@ class DualGridView(context: Context) : View(context) {
     private var sugManageRunnable: Runnable? = null
     private val TUTORIAL_SENTINEL = ""
     private val clipListener = android.content.ClipboardManager.OnPrimaryClipChangedListener {
-        if (clipHistOn && context is InputMethodService && !sensitiveField) {
+        if (clipHistOn && context is InputMethodService && !noLearnField) {
             val txt = clipMgr.primaryClip?.takeIf { it.itemCount > 0 }
                 ?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty()
             if (txt.isNotBlank()) {
@@ -1765,10 +1779,10 @@ class DualGridView(context: Context) : View(context) {
         if (sensitiveField) return
         val f = finished.lowercase()
         if (f.isNotEmpty()) {
-            if (nextWordOn && lastCompletedWord.isNotEmpty())
+            if (nextWordOn && !noLearnField && lastCompletedWord.isNotEmpty())
                 Prefs.logWordPair(context, lang, lastCompletedWord, f)
             lastCompletedWord = f
-            nextWordCands = if (nextWordOn)
+            nextWordCands = if (nextWordOn && !noLearnField)
                 Prefs.wordPairFollowers(context, lang, f)
                     .filter { SpellEngine.isWord(it.first) && !blacklist.contains(it.first) }
                     .take(3).map { it.first }
@@ -1792,7 +1806,7 @@ class DualGridView(context: Context) : View(context) {
         invalidate()
     }
     private fun syncClipFromSystem() {
-        if (!clipHistOn || context !is InputMethodService || sensitiveField) return
+        if (!clipHistOn || context !is InputMethodService || noLearnField) return
         val txt = (clipMgr.primaryClip?.takeIf { it.itemCount > 0 }
             ?.getItemAt(0)?.coerceToText(context)?.toString() ?: "")
             .replace("\n", " ").trim()
@@ -1831,8 +1845,10 @@ class DualGridView(context: Context) : View(context) {
         if (token.isEmpty()) return
         lastAutocorrect = null
         if (word == token.lowercase()) return
-        Prefs.putLearned(context, token.lowercase(), word.lowercase())
-        learned = Prefs.learned(context)
+        if (!noLearnField) {
+            Prefs.putLearned(context, token.lowercase(), word.lowercase())
+            learned = Prefs.learned(context)
+        }
         repeat(token.length) { textTarget?.deleteBefore() }
         val formatted = if (token[0].isUpperCase())
             word.replaceFirstChar { it.uppercase() } else word
@@ -2022,7 +2038,7 @@ class DualGridView(context: Context) : View(context) {
         }
         lastAutocorrect = null
         undoStack.clear()
-        if (bigramsEnabled && !sensitiveField && !tutorialMode &&
+        if (bigramsEnabled && !noLearnField && !tutorialMode &&
             out.length == 1 && out[0].isLetter()) {
             val cur = out.lowercase()
             lastLetter?.let { prev -> logBigram(prev, cur) }
