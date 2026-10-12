@@ -171,6 +171,35 @@ object Prefs {
             m.entries.joinToString(",") { e -> e.key + ">" + e.value }
         ).apply()
     }
+    const val KEY_NEXTWORD = "nextword_enabled"
+    const val KEY_NEXTWORD_WARNED = "nextword_warned"
+    const val KEY_WORDPAIRS = "wordpairs"
+
+    fun nextWord(ctx: Context) = prefs(ctx).getBoolean(KEY_NEXTWORD, false)
+    fun nextWordWarned(ctx: Context) = prefs(ctx).getBoolean(KEY_NEXTWORD_WARNED, false)
+
+    fun logWordPair(ctx: Context, lang: String, prev: String, next: String) {
+        val raw = prefs(ctx).getString(KEY_WORDPAIRS, "") ?: ""
+        val m = LinkedHashMap<String, Int>()
+        for (e in raw.split(",").filter { it.isNotEmpty() }) {
+            val i = e.lastIndexOf('=')
+            if (i > 0) m[e.substring(0, i)] = e.substring(i + 1).toIntOrNull() ?: 1
+        }
+        val key = "$lang>$prev>$next"
+        m[key] = (m[key] ?: 0) + 1
+        prefs(ctx).edit().putString(KEY_WORDPAIRS,
+            m.entries.joinToString(",") { "${it.key}=${it.value}" }).apply()
+    }
+
+    fun wordPairFollowers(ctx: Context, lang: String, prev: String): List<Pair<String, Int>> {
+        val raw = prefs(ctx).getString(KEY_WORDPAIRS, "") ?: ""
+        val pre = "$lang>$prev>"
+        return raw.split(",").filter { it.startsWith(pre) }.mapNotNull { e ->
+            val i = e.lastIndexOf('=')
+            if (i <= 0) null else e.substring(pre.length, i) to (e.substring(i + 1).toIntOrNull() ?: 1)
+        }.sortedByDescending { it.second }
+    }
+
     const val KEY_CLIPHIST = "clip_history"
     const val KEY_CLIPHIST_ON = "clip_history_enabled"
     private const val CLIP_SEP = ""
@@ -502,6 +531,7 @@ class SettingsActivity : AppCompatActivity() {
     private val sectionHeaders = mutableListOf<TextView>()
     private val sectionContainers = mutableListOf<LinearLayout>()
     private lateinit var corrSw: MaterialSwitch
+    private lateinit var nwSw: MaterialSwitch
 
     private val swatches = listOf(
         0,
@@ -648,6 +678,18 @@ class SettingsActivity : AppCompatActivity() {
         })
         mSwitch(R.string.switch_cliphist, Prefs.clipHistOn(this))
         { putB(Prefs.KEY_CLIPHIST_ON, it) }
+        nwSw = mSwitch(R.string.switch_nextword, Prefs.nextWord(this)) { v ->
+            if (v) {
+                if (!Prefs.nextWordWarned(this)) {
+                    nwSw.isChecked = false
+                    showNextWordWarning {
+                        putB(Prefs.KEY_NEXTWORD_WARNED, true)
+                        putB(Prefs.KEY_NEXTWORD, true)
+                        nwSw.isChecked = true
+                    }
+                } else putB(Prefs.KEY_NEXTWORD, true)
+            } else putB(Prefs.KEY_NEXTWORD, false)
+        }
         root.addView(TextView(this).apply {
             text = getString(R.string.settings_note)
             textSize = 13f
@@ -1028,6 +1070,15 @@ class SettingsActivity : AppCompatActivity() {
             .setPositiveButton(getString(R.string.corrector_warning_ok)) { _, _ -> onAccept() }
             .show()
     }
+    private fun showNextWordWarning(onAccept: () -> Unit) {
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.nextword_warning_title))
+            .setMessage(getString(R.string.nextword_warning_body))
+            .setCancelable(false)
+            .setNegativeButton(getString(R.string.bigrams_warning_cancel), null)
+            .setPositiveButton(getString(R.string.nextword_warning_ok)) { _, _ -> onAccept() }
+            .show()
+    }
 
     private fun showBlacklist() {
         val prefs = getSharedPreferences(Prefs.NAME, MODE_PRIVATE)
@@ -1324,6 +1375,9 @@ class DualGridView(context: Context) : View(context) {
     private var suggestions: List<String> = emptyList()
     private var pendingUndoLen = 0
     private var lastAutocorrect: Pair<String, String>? = null
+    private var nextWordOn = Prefs.nextWord(context)
+    private var nextWordCands: List<String> = emptyList()
+    private var lastCompletedWord = ""
     private val rejectedCorrections = mutableSetOf<String>()
     private var correctorOn = Prefs.corrector(context)
     private var autocorrectSpace = Prefs.autocorrectSpace(context)
@@ -1336,6 +1390,10 @@ class DualGridView(context: Context) : View(context) {
     private var clipFull = ""
     private var clipHistOn = Prefs.clipHistOn(context)
     private var clipMenuOpen = false
+    private var clipMenuJustOpened = false
+    private var sugPressPointer = -1
+    private var sugOpenRunnable: Runnable? = null
+    private val LONG_PRESS_MS = 1000L
     private val clipListener = android.content.ClipboardManager.OnPrimaryClipChangedListener {
         if (clipHistOn && context is InputMethodService) {
             val txt = clipMgr.primaryClip?.takeIf { it.itemCount > 0 }
@@ -1437,6 +1495,7 @@ class DualGridView(context: Context) : View(context) {
         confidenceMin = Prefs.confidence(context)
         undoWhole = Prefs.undoWhole(context)
         clipHistOn = Prefs.clipHistOn(context)
+        nextWordOn = Prefs.nextWord(context)
         blacklist = Prefs.blacklist(context)
         learned = Prefs.learned(context)
         SpellEngine.loadAsync(context, lang) {
@@ -1558,6 +1617,8 @@ class DualGridView(context: Context) : View(context) {
             }
             base.addAll(cands.take(3))
             if (base.isEmpty()) base.add(low)
+        } else if (tok.isEmpty()) {
+            base.addAll(nextWordCands)
         }
         val clip = if (context is InputMethodService)
             (clipMgr.primaryClip?.takeIf { it.itemCount > 0 }
@@ -1571,6 +1632,23 @@ class DualGridView(context: Context) : View(context) {
         else listOf(base.getOrElse(0) { "" }, base.getOrElse(1) { "" }, third)
         Log.d("ThumbGrid", "sugg tok='$tok' n=${suggestions.count { it.isNotEmpty() }} dict=${SpellEngine.size()}")
     }
+    private fun handleBoundary(finished: String) {
+        val f = finished.lowercase()
+        if (f.isNotEmpty()) {
+            if (nextWordOn && lastCompletedWord.isNotEmpty())
+                Prefs.logWordPair(context, lang, lastCompletedWord, f)
+            lastCompletedWord = f
+            nextWordCands = if (nextWordOn)
+                Prefs.wordPairFollowers(context, lang, f)
+                    .filter { SpellEngine.isWord(it.first) && !blacklist.contains(it.first) }
+                    .take(3).map { it.first }
+            else emptyList()
+        } else {
+            nextWordCands = emptyList()
+        }
+        refreshSuggestions()
+    }
+
     private fun clipMenuRect(): RectF {
         val g = geo()
         return RectF(g.contentLeft + px(8f), g.sugH + px(8f),
@@ -1613,7 +1691,7 @@ class DualGridView(context: Context) : View(context) {
         undoStack.clear()
         lastAutocorrect = low to formatted
         pendingUndoLen = 0
-        refreshSuggestions()
+        handleBoundary(formatted.lowercase())
         return true
     }
 
@@ -1755,6 +1833,7 @@ class DualGridView(context: Context) : View(context) {
 
     private fun commitChar(raw: String): String {
         var out = raw
+        val boundaryWord = if (out.length == 1 && out[0] in autoSpaceChars) currentToken() else ""
         if (out.length == 1 && out[0].isLetter()) {
             val upper = shiftMode != ShiftMode.OFF || shouldAutoCap()
             if (upper) out = out.uppercase()
@@ -1781,7 +1860,7 @@ class DualGridView(context: Context) : View(context) {
             lastLetter = null
         }
         tutEvent?.invoke("commit:$out")
-        refreshSuggestions()
+        if (boundaryWord.isNotEmpty()) handleBoundary(boundaryWord) else refreshSuggestions()
         invalidate()
         return out
     }
@@ -2526,7 +2605,15 @@ class DualGridView(context: Context) : View(context) {
         val edgeZone = 24 * resources.displayMetrics.density
         val now = SystemClock.uptimeMillis()
         if (clipMenuOpen) {
+            if (clipMenuJustOpened && event.actionMasked == MotionEvent.ACTION_UP) {
+                clipMenuJustOpened = false
+                return true
+            }
             when (event.actionMasked) {
+                MotionEvent.ACTION_UP -> if (clipMenuJustOpened) {
+                    clipMenuJustOpened = false
+                    return true
+                }
                 MotionEvent.ACTION_DOWN -> return true
                 MotionEvent.ACTION_UP -> {
                     val x = event.getX(0); val y = event.getY(0)
@@ -2638,6 +2725,16 @@ class DualGridView(context: Context) : View(context) {
                     presses[id] = PressAnim(side, row, col, now)
                     kickAnim()
                 }
+                if (zone == Zone.SUGGEST && cellIndex == 2 && clipHistOn) {
+                    sugPressPointer = id
+                    sugOpenRunnable = Runnable {
+                        Prefs.pruneClipHistory(context)
+                        clipMenuOpen = true
+                        clipMenuJustOpened = true
+                        invalidate()
+                    }
+                    handler.postDelayed(sugOpenRunnable!!, LONG_PRESS_MS)
+                }
             }
 
             MotionEvent.ACTION_MOVE -> {
@@ -2651,6 +2748,12 @@ class DualGridView(context: Context) : View(context) {
                     val dxEvent = x - state.lastX
                     state.currentX = x
                     state.currentY = y
+                    if (sugPressPointer == id &&
+                        hypot(x - state.startX, y - state.startY) > swipeThreshold) {
+                        sugOpenRunnable?.let { handler.removeCallbacks(it) }
+                        sugOpenRunnable = null
+                        sugPressPointer = -1
+                    }
 
                     if (state.zone == Zone.SLIDER) {
                         if (state.knobDrag) {
@@ -2737,6 +2840,11 @@ class DualGridView(context: Context) : View(context) {
                 val id = event.getPointerId(index)
                 stopEdgeRepeat(id)
                 val state = activePointers.remove(id) ?: return true
+                if (sugPressPointer == id) {
+                    sugOpenRunnable?.let { handler.removeCallbacks(it) }
+                    sugOpenRunnable = null
+                    sugPressPointer = -1
+                }
                 presses.remove(id)?.let { p ->
                     p.release = now
                     fadingPresses.add(p)
@@ -2755,6 +2863,9 @@ class DualGridView(context: Context) : View(context) {
                 activePointers.keys.toList().forEach { id ->
                     presses.remove(id)?.let { p -> p.release = now; fadingPresses.add(p) }
                 }
+                sugOpenRunnable?.let { handler.removeCallbacks(it) }
+                sugOpenRunnable = null
+                sugPressPointer = -1
                 activePointers.clear()
                 knobSpringFrom = knobP
                 knobSpringStart = now
@@ -2811,7 +2922,16 @@ class DualGridView(context: Context) : View(context) {
                     return
                 }
                 val word = suggestions.getOrElse(candIdx) { "" }
-                if (word.isNotEmpty()) applySuggestion(word)
+                if (word.isEmpty()) return
+                if (currentToken().isEmpty()) {
+                    textTarget?.commit(word)
+                    textTarget?.commit(" ")
+                    undoStack.clear()
+                    refreshSuggestions()
+                    invalidate()
+                    return
+                }
+                applySuggestion(word)
             }
 
             Zone.SYMBOL -> {
@@ -2879,6 +2999,7 @@ class DualGridView(context: Context) : View(context) {
                 SwipeDir.TAP -> {
                     val applied = maybeAutocorrect()
                     if (!applied) {
+                        val finished = currentToken()
                         val b = textTarget?.peekBefore(2) ?: ""
                         val blocked = autoSpace && b.length == 2 && b[1] == ' ' && b[0] in autoSpaceChars
                         if (!blocked) {
@@ -2888,6 +3009,7 @@ class DualGridView(context: Context) : View(context) {
                             lastAutocorrect = null
                             spawnFeedback(null, 0, 0, true, "␣")
                         }
+                        handleBoundary(finished)
                     }
                 }
                 SwipeDir.W -> {

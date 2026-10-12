@@ -108,7 +108,10 @@ object SpellEngine {
         for (c in listOf("l", "d", "n", "s", "m", "t")) {
             if (x.startsWith(c)) {
                 val rest = x.substring(1)
-                if (rest.isNotEmpty() && words.contains(rest)) return "$c'$rest"
+                if (rest.isNotEmpty() && rest[0] in "aeiouhàèéíòóúü" && words.contains(rest)) {
+                    val restAcc = accentBetter(rest) ?: rest
+                    return "$c'$restAcc"
+                }
             }
         }
         return null
