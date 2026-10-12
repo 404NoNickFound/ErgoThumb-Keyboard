@@ -1,4 +1,5 @@
 <resources>
+    <string name="sensitive_hint">Sensitive field: nothing is stored</string>
     <string name="banner_tutorial">Take the tutorial by tapping here</string>
     <string name="app_name">ErgoThumb</string>
     <string name="switch_nextword">Next-word prediction (local learning)</string>

@@ -1329,6 +1329,7 @@ class ThumbImeService : InputMethodService() {
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
         gridView?.resetOverlays()
+        android.util.Log.d("ThumbGrid", "inputType=0x${Integer.toHexString(info?.inputType ?: 0)} imeOptions=0x${Integer.toHexString(info?.imeOptions ?: 0)}")
         if (!Prefs.onboarded(this)) {
             val sys = resources.configuration.locales.get(0)?.language ?: "ca"
             val code = if (sys in Layouts.CODES) sys else "ca"
@@ -1509,7 +1510,7 @@ class DualGridView(context: Context) : View(context) {
     private var sugManageRunnable: Runnable? = null
     private val TUTORIAL_SENTINEL = ""
     private val clipListener = android.content.ClipboardManager.OnPrimaryClipChangedListener {
-        if (clipHistOn && context is InputMethodService) {
+        if (clipHistOn && context is InputMethodService && !sensitiveField) {
             val txt = clipMgr.primaryClip?.takeIf { it.itemCount > 0 }
                 ?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty()
             if (txt.isNotBlank()) {
@@ -1523,7 +1524,7 @@ class DualGridView(context: Context) : View(context) {
     private var locContext: Context = context
 
     private fun refreshLocContext() {
-        val conf = resources.configuration
+        val conf = android.content.res.Configuration(resources.configuration)
         conf.setLocale(java.util.Locale.forLanguageTag(lang))
         locContext = context.createConfigurationContext(conf)
     }
@@ -1644,6 +1645,7 @@ class DualGridView(context: Context) : View(context) {
         caseInitialized = false
         barP = barTarget
         resetOverlays()
+        refreshLocContext()
         if (context is InputMethodService) {
             clipMgr.addPrimaryClipChangedListener(clipListener)
             syncClipFromSystem()
@@ -1727,6 +1729,7 @@ class DualGridView(context: Context) : View(context) {
 
     private fun refreshSuggestions() {
         if (!correctorOn) { suggestions = emptyList(); return }
+        if (sensitiveField) { suggestions = emptyList(); clipFull = ""; return }
         val tok = currentToken()
         val low = tok.lowercase()
         val base = ArrayList<String>(3)
@@ -1759,6 +1762,7 @@ class DualGridView(context: Context) : View(context) {
         Log.d("ThumbGrid", "sugg tok='$tok' n=${suggestions.count { it.isNotEmpty() }} dict=${SpellEngine.size()}")
     }
     private fun handleBoundary(finished: String) {
+        if (sensitiveField) return
         val f = finished.lowercase()
         if (f.isNotEmpty()) {
             if (nextWordOn && lastCompletedWord.isNotEmpty())
@@ -1788,7 +1792,7 @@ class DualGridView(context: Context) : View(context) {
         invalidate()
     }
     private fun syncClipFromSystem() {
-        if (!clipHistOn || context !is InputMethodService) return
+        if (!clipHistOn || context !is InputMethodService || sensitiveField) return
         val txt = (clipMgr.primaryClip?.takeIf { it.itemCount > 0 }
             ?.getItemAt(0)?.coerceToText(context)?.toString() ?: "")
             .replace("\n", " ").trim()
@@ -1802,6 +1806,7 @@ class DualGridView(context: Context) : View(context) {
     }
 
     private fun tryOpenClipMenu(justOpened: Boolean) {
+        if (sensitiveField) return
         Prefs.pruneClipHistory(context)
         if (clipMenuRows().isEmpty()) return
         clipMenuOpen = true
@@ -1821,6 +1826,7 @@ class DualGridView(context: Context) : View(context) {
     }
 
     private fun applySuggestion(word: String) {
+        if (sensitiveField) return
         val token = currentToken()
         if (token.isEmpty()) return
         lastAutocorrect = null
@@ -1839,6 +1845,7 @@ class DualGridView(context: Context) : View(context) {
     }
 
     private fun maybeAutocorrect(): Boolean {
+        if (sensitiveField) return false
         val tok = currentToken()
         val low = tok.lowercase()
         val target = pendingTarget(tok, low) ?: return false
@@ -2291,6 +2298,29 @@ class DualGridView(context: Context) : View(context) {
         val g = geo()
         return (g.stripH / 2f) / height.coerceAtLeast(1)
     }
+    private fun drawIncognito(canvas: Canvas, r: RectF) {
+        val cy = r.centerY()
+        val s = px(10f)
+        val msg = locStr(R.string.sensitive_hint)
+        hintPaint.color = theme.hint
+        hintPaint.textSize = px(12f)
+        hintPaint.typeface = fontRegular
+        val tw = hintPaint.measureText(msg)
+        val gap = px(10f)
+        val total = s * 2f + gap + tw
+        val startX = r.centerX() - total / 2f
+        val ix = startX + s
+        iconPaint.color = theme.hint
+        iconPaint.strokeWidth = px(2f)
+        canvas.drawCircle(ix, cy, s, iconPaint)
+        canvas.drawLine(ix - s * 0.7f, cy + s * 0.7f, ix + s * 0.7f, cy - s * 0.7f, iconPaint)
+        val yC = -(hintPaint.descent() + hintPaint.ascent()) / 2f
+        val oldAlign = hintPaint.textAlign
+        hintPaint.textAlign = Paint.Align.LEFT
+        canvas.drawText(msg, ix + s + gap, cy + yC, hintPaint)
+        hintPaint.textAlign = oldAlign
+    }
+
 
     private fun drawSymbolLayer(canvas: Canvas, g: Geo) {
         val area = RectF(g.contentLeft, g.gridTop, g.contentLeft + g.contentWidth, g.capsuleTop)
@@ -2400,6 +2430,8 @@ class DualGridView(context: Context) : View(context) {
                 canvas.drawText("•", dotX, topRect.bottom - px(6f), hintPaint)
             }
             hintPaint.alpha = 255
+        } else if (sensitiveField) {
+            drawIncognito(canvas, topRect)
         } else if (suggestions.isEmpty()) {
             hintPaint.color = theme.hint
             hintPaint.textSize = px(12f)
@@ -2934,7 +2966,7 @@ class DualGridView(context: Context) : View(context) {
                     kickAnim()
                 }
                 if (zone == Zone.SUGGEST) {
-                    if (cellIndex == 2 && clipHistOn) {
+                    if (cellIndex == 2 && clipHistOn && !sensitiveField) {
                         sugPressPointer = id
                         sugOpenRunnable = Runnable {
                             tryOpenClipMenu(true)

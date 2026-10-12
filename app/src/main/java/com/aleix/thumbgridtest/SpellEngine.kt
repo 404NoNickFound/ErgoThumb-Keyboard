@@ -98,17 +98,31 @@ object SpellEngine {
     private val CLITICS = listOf("n", "l", "ls", "m", "t", "ns", "s")
     private val PRONS = listOf("me", "te", "se")
 
+    private val PRON_CLITICS = listOf("n", "l", "ls")
+    private val ELID_PRON = listOf("hi", "ha")
+
     private fun cliticForm(x: String): String? {
         for (p in PRONS) {
             if (x.startsWith(p)) {
                 val rest = x.substring(p.length)
-                if (rest in CLITICS) return "$p'$rest"
+                if (rest == "n" || rest == "l" || rest == "ls") return "$p'$rest"
             }
         }
-        for (c in listOf("l", "d", "n", "s", "m", "t")) {
+        for (c in listOf("m", "t", "n", "s")) {
             if (x.startsWith(c)) {
                 val rest = x.substring(1)
-                if (rest.isNotEmpty() && rest[0] in "aeiouhàèéíòóúü" && words.contains(rest)) {
+                if (rest == "hi" || rest == "ha") {
+                    if (words.contains(rest)) return "$c'$rest"
+                }
+            }
+        }
+        for (c in listOf("l", "d")) {
+            if (x.startsWith(c)) {
+                val rest = x.substring(1)
+                val ok = rest.length >= 2 && rest != "hi" &&
+                        (rest[0] in "aeiouhàèéíòóúü") &&
+                        !(c == "d" && rest == "ha")
+                if (ok && words.contains(rest)) {
                     val restAcc = accentBetter(rest) ?: rest
                     return "$c'$restAcc"
                 }

@@ -1,4 +1,5 @@
 <resources>
+    <string name="sensitive_hint">Camp sensible: no es guarda res</string>
     <string name="banner_tutorial">Fes el tutorial tocant aquí</string>
     <string name="app_name">ErgoThumb</string>
     <string name="switch_nextword">Predicció de paraula següent (aprenentatge local)</string>
