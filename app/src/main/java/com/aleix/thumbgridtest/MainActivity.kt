@@ -151,25 +151,35 @@ object Prefs {
     fun autocorrectSpace(ctx: Context) = prefs(ctx).getBoolean(KEY_AUTOCORRECT_SPACE, true)
     fun confidence(ctx: Context) = prefs(ctx).getFloat(KEY_CONFIDENCE, DEFAULT_CONFIDENCE)
     fun undoWhole(ctx: Context) = prefs(ctx).getBoolean(KEY_UNDO_WHOLE, true)
-    fun blacklist(ctx: Context): Set<String> =
-        (prefs(ctx).getString(KEY_BLACKLIST, "") ?: "")
-            .split(",").map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+    fun blacklist(ctx: Context): Set<String> = nsSet(ctx, KEY_BLACKLIST)
     fun learned(ctx: Context): Map<String, String> {
+        ensureNs(ctx)
+        val cur = lang(ctx)
         val raw = prefs(ctx).getString(KEY_LEARNED, "") ?: ""
         if (raw.isEmpty()) return emptyMap()
-        return raw.split(",").mapNotNull { pair ->
-            val idx = pair.indexOf('>')
-            if (idx <= 0) null else pair.substring(0, idx) to pair.substring(idx + 1)
-        }.toMap()
+        val m = HashMap<String, String>()
+        for (e in raw.split(",")) {
+            val first = e.indexOf('>')
+            if (first <= 0) continue
+            val second = e.indexOf('>', first + 1)
+            if (second <= 0) continue
+            if (e.substring(0, first) != cur) continue
+            m[e.substring(first + 1, second)] = e.substring(second + 1)
+        }
+        return m
     }
 
-    fun putLearned(ctx: Context, from: String, to: String) {
+    fun putLearned(ctx: Context, key: String, value: String) {
+        val cur = lang(ctx)
         val m = learned(ctx).toMutableMap()
-        m[from] = to
-        prefs(ctx).edit().putString(
-            KEY_LEARNED,
-            m.entries.joinToString(",") { e -> e.key + ">" + e.value }
-        ).apply()
+        m[key] = value
+        val raw = prefs(ctx).getString(KEY_LEARNED, "") ?: ""
+        val others = raw.split(",").filter { e ->
+            val first = e.indexOf('>')
+            first > 0 && e.substring(0, first) != cur && e.count { it == '>' } >= 2
+        }
+        val mine = m.entries.map { "$cur>${it.key}>${it.value}" }
+        prefs(ctx).edit().putString(KEY_LEARNED, (others + mine).joinToString(",")).apply()
     }
     const val KEY_NEXTWORD = "nextword_enabled"
     const val KEY_NEXTWORD_WARNED = "nextword_warned"
@@ -200,37 +210,78 @@ object Prefs {
         }.sortedByDescending { it.second }
     }
     const val KEY_PERSONAL = "personal_dict"
+    private const val KEY_NS_DONE = "namespaces_migrated"
 
-    fun personal(ctx: Context): Set<String> =
-        (prefs(ctx).getString(KEY_PERSONAL, "") ?: "")
-            .split(",").map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+    private fun ensureNs(ctx: Context) {
+        if (prefs(ctx).getBoolean(KEY_NS_DONE, false)) return
+        val cur = lang(ctx)
+        val rawL = prefs(ctx).getString(KEY_LEARNED, "") ?: ""
+        if (rawL.isNotEmpty()) {
+            prefs(ctx).edit().putString(KEY_LEARNED, rawL.split(",").map { e ->
+                if (e.count { it == '>' } == 1) "$cur>$e" else e
+            }.joinToString(",")).apply()
+        }
+        for (k in listOf(KEY_PERSONAL, KEY_BLACKLIST)) {
+            val raw = prefs(ctx).getString(k, "") ?: ""
+            if (raw.isNotEmpty()) {
+                prefs(ctx).edit().putString(k, raw.split(",").map { e ->
+                    if (!e.contains('>')) "$cur>$e" else e
+                }.joinToString(",")).apply()
+            }
+        }
+        prefs(ctx).edit().putBoolean(KEY_NS_DONE, true).apply()
+    }
+
+    private fun nsSet(ctx: Context, key: String): Set<String> {
+        ensureNs(ctx)
+        val cur = lang(ctx)
+        return (prefs(ctx).getString(key, "") ?: "").split(",").mapNotNull { e ->
+            val i = e.indexOf('>')
+            if (i <= 0) null else if (e.substring(0, i) == cur) e.substring(i + 1) else null
+        }.toSet()
+    }
+
+    private fun rewriteNsSet(ctx: Context, key: String, s: Set<String>) {
+        val cur = lang(ctx)
+        val raw = prefs(ctx).getString(key, "") ?: ""
+        val others = raw.split(",").filter { e ->
+            val i = e.indexOf('>')
+            i > 0 && e.substring(0, i) != cur
+        }
+        val mine = s.map { "$cur>$it" }
+        prefs(ctx).edit().putString(key, (others + mine).joinToString(",")).apply()
+    }
+
+    fun personal(ctx: Context): Set<String> = nsSet(ctx, KEY_PERSONAL)
 
     fun addPersonal(ctx: Context, w: String) {
         val s = personal(ctx).toMutableSet(); s.add(w)
-        prefs(ctx).edit().putString(KEY_PERSONAL, s.joinToString(",")).apply()
+        rewriteNsSet(ctx, KEY_PERSONAL, s)
     }
 
     fun removePersonal(ctx: Context, w: String) {
         val s = personal(ctx).toMutableSet(); s.remove(w)
-        prefs(ctx).edit().putString(KEY_PERSONAL, s.joinToString(",")).apply()
+        rewriteNsSet(ctx, KEY_PERSONAL, s)
     }
+
     fun addBlacklist(ctx: Context, w: String) {
         val s = blacklist(ctx).toMutableSet(); s.add(w)
-        prefs(ctx).edit().putString(KEY_BLACKLIST, s.joinToString(",")).apply()
+        rewriteNsSet(ctx, KEY_BLACKLIST, s)
     }
 
     fun removeBlacklist(ctx: Context, w: String) {
         val s = blacklist(ctx).toMutableSet(); s.remove(w)
-        prefs(ctx).edit().putString(KEY_BLACKLIST, s.joinToString(",")).apply()
+        rewriteNsSet(ctx, KEY_BLACKLIST, s)
     }
 
     fun purgeLearnedValue(ctx: Context, value: String) {
-        val m = learned(ctx).toMutableMap()
-        val keys = m.keys.filter { m[it] == value }
-        if (keys.isEmpty()) return
-        keys.forEach { m.remove(it) }
-        prefs(ctx).edit().putString(KEY_LEARNED,
-            m.entries.joinToString(",") { e -> e.key + ">" + e.value }).apply()
+        val raw = prefs(ctx).getString(KEY_LEARNED, "") ?: ""
+        val kept = raw.split(",").filter { e ->
+            val first = e.indexOf('>')
+            val second = if (first >= 0) e.indexOf('>', first + 1) else -1
+            !(second > 0 && e.substring(second + 1) == value)
+        }
+        prefs(ctx).edit().putString(KEY_LEARNED, kept.joinToString(",")).apply()
     }
 
     const val KEY_CLIPHIST = "clip_history"
@@ -1915,6 +1966,10 @@ class DualGridView(context: Context) : View(context) {
         Prefs.setLang(context, lang)
         refreshLocContext()
         suggestions = emptyList()
+        blacklist = Prefs.blacklist(context)
+        learned = Prefs.learned(context)
+        personal = Prefs.personal(context)
+        SpellEngine.setPersonal(personal)
         SpellEngine.loadAsync(context, lang) {
             refreshSuggestions()
             invalidate()
