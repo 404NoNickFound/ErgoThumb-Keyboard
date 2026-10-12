@@ -1329,7 +1329,6 @@ class ThumbImeService : InputMethodService() {
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
         gridView?.resetOverlays()
-        android.util.Log.d("ThumbGrid", "inputType=0x${Integer.toHexString(info?.inputType ?: 0)} imeOptions=0x${Integer.toHexString(info?.imeOptions ?: 0)}")
         if (!Prefs.onboarded(this)) {
             val sys = resources.configuration.locales.get(0)?.language ?: "ca"
             val code = if (sys in Layouts.CODES) sys else "ca"
