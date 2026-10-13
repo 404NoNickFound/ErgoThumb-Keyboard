@@ -34,6 +34,7 @@ class TutorialActivity : AppCompatActivity() {
     private lateinit var cardScroll: ScrollView
     private lateinit var actionBtn: MaterialButton
     private lateinit var skipBtn: MaterialButton
+    private lateinit var skipStepBtn: MaterialButton
     private lateinit var transitionTv: TextView
 
     private val handler = Handler(Looper.getMainLooper())
@@ -61,8 +62,13 @@ class TutorialActivity : AppCompatActivity() {
     private var symOpen = false
     private var capsOnState = false
 
-    private val writingSteps = setOf(1, 2, 3, 7, 9, 10, 11)
-    private val manipSteps = setOf(4, 5, 6, 8)
+    private val writingSteps = setOf(1, 2, 3, 7, 9, 10, 11, 14)
+    private val manipSteps = setOf(4, 5, 6, 8, 12, 13, 15, 16)
+    private var clipPastes = 0
+    private var menuOpens = 0
+    private var trashDeletes = 0
+    private var predictTaps = 0
+    private var manageAdds = 0
 
     private data class Phase(val textRes: Int, val demo: Int, val validate: () -> Boolean)
 
@@ -77,6 +83,7 @@ class TutorialActivity : AppCompatActivity() {
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
 
         titles = resources.getStringArray(R.array.tutorial_titles)
+        Prefs.addClipEntry(this, getString(R.string.tutorial_clip_sample))
         sampleText = resources.getStringArray(R.array.tutorial_text).joinToString("\n\n")
 
         val screenH = resources.displayMetrics.heightPixels
@@ -130,9 +137,11 @@ class TutorialActivity : AppCompatActivity() {
             setPadding(0, 0, 0, 12)
         }
         actionBtn = MaterialButton(this)
+        skipStepBtn = MaterialButton(this)
         panel.addView(titleTv)
         panel.addView(descTv)
         panel.addView(actionBtn)
+        panel.addView(skipStepBtn)
         cardScroll.addView(panel)
 
         editor = AppCompatEditText(this).apply {
@@ -301,6 +310,14 @@ class TutorialActivity : AppCompatActivity() {
                 Phase(R.string.p10c, -1) { !symOpen }
             )
             11 -> listOf(Phase(R.string.p11a, 11) { langCycles >= 2 })
+            12 -> listOf(Phase(R.string.p13a, -1) { clipPastes >= 1 })
+            13 -> listOf(
+                Phase(R.string.p14a, -1) { menuOpens >= 1 },
+                Phase(R.string.p14b, -1) { trashDeletes >= 1 }
+            )
+            14 -> listOf(Phase(R.string.p15a, -1) { false })
+            15 -> listOf(Phase(R.string.p16a, -1) { predictTaps >= 1 })
+            16 -> listOf(Phase(R.string.p17a, -1) { manageAdds >= 1 })
             else -> listOf(Phase(R.string.p12a, -1) { false })
         }
     }
@@ -313,6 +330,11 @@ class TutorialActivity : AppCompatActivity() {
                 if (ch.uppercaseChar() in tapSet) tapCommits++ else gestCommits++
                 fixTypo()
             }
+            ev == "clipPaste" -> { clipPastes++; checkProgress() }
+            ev == "clipMenu" -> { menuOpens++; checkProgress() }
+            ev == "clipTrash" -> { trashDeletes++; checkProgress() }
+            ev == "predictTap" -> { predictTaps++; checkProgress() }
+            ev == "manageAdd" -> { manageAdds++; checkProgress() }
             ev == "delete" -> deletes++
             ev == "redo" -> redos++
             ev == "enter" -> enterDone = true
@@ -369,6 +391,8 @@ class TutorialActivity : AppCompatActivity() {
     }
 
     private fun advanceStep() {
+        clipPastes = 0; menuOpens = 0; trashDeletes = 0
+        predictTaps = 0; manageAdds = 0
         transitioning = true
         transitionTv.text = "✓  " + titles.getOrElse(step) { "" }
         transitionTv.visibility = View.VISIBLE
@@ -409,6 +433,10 @@ class TutorialActivity : AppCompatActivity() {
         else getString(cur.textRes)
         overlay.targetWord = getString(R.string.tutorial_target_word)
         overlay.setDemo(cur.demo)
+        skipStepBtn.visibility =
+            if (step in 1..titles.size - 2 && step != 14 && step != 17) View.VISIBLE else View.GONE
+        skipStepBtn.text = getString(R.string.tutorial_skip_step)
+        skipStepBtn.setOnClickListener { advanceStep() }
         clearExtraPanels()
 
         val hideGrid = (step == 0 || step == titles.size - 1)
@@ -439,6 +467,11 @@ class TutorialActivity : AppCompatActivity() {
                 actionBtn.visibility = View.VISIBLE
                 actionBtn.text = getString(R.string.tutorial_finish)
                 actionBtn.setOnClickListener { finishTutorial() }
+            }
+            14 -> {
+                actionBtn.visibility = View.VISIBLE
+                actionBtn.text = getString(R.string.tutorial_continue)
+                actionBtn.setOnClickListener { advanceStep() }
             }
             else -> actionBtn.visibility = View.GONE
         }
@@ -594,6 +627,7 @@ class TutorialActivity : AppCompatActivity() {
     }
 
     private fun finishTutorial() {
+        Prefs.removeClipEntry(this, getString(R.string.tutorial_clip_sample))
         getSharedPreferences(Prefs.NAME, MODE_PRIVATE).edit()
             .putBoolean(Prefs.KEY_TUTORIAL_DONE, true).apply()
         startActivity(Intent(this, MainActivity::class.java))

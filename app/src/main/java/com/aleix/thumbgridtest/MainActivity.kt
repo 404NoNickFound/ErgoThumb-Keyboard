@@ -1759,7 +1759,7 @@ class DualGridView(context: Context) : View(context) {
         } else if (tok.isEmpty()) {
             base.addAll(nextWordCands)
         }
-        val clip = if (clipHistOn && context is InputMethodService)
+        val clip = if (clipHistOn)
             (Prefs.clipHistory(context).firstOrNull()?.second).orEmpty()
         else ""
         clipFull = clip
@@ -1767,7 +1767,8 @@ class DualGridView(context: Context) : View(context) {
             (if (clip.length > 14) clip.take(14) + "…" else clip)
         else base.getOrElse(2) { "" }
         suggestions = when {
-            tok.isEmpty() && base.all { it.isEmpty() } && third.isEmpty() && tutorialBanner ->
+            tok.isEmpty() && base.all { it.isEmpty() } && third.isEmpty() &&
+                    tutorialBanner && !tutorialMode ->
                 listOf("", TUTORIAL_SENTINEL, "")
             base.all { it.isEmpty() } && third.isEmpty() -> emptyList()
             else -> listOf(base.getOrElse(0) { "" }, base.getOrElse(1) { "" }, third)
@@ -1824,6 +1825,7 @@ class DualGridView(context: Context) : View(context) {
         if (clipMenuRows().isEmpty()) return
         clipMenuOpen = true
         if (justOpened) clipMenuJustOpened = true
+        tutEvent?.invoke("clipMenu")
         invalidate()
     }
 
@@ -2879,6 +2881,7 @@ class DualGridView(context: Context) : View(context) {
                             val word = rows[idx]
                             if (x > r.right - px(48f)) {
                                 Prefs.removeClipEntry(context, word)
+                                tutEvent?.invoke("clipTrash")
                                 refreshSuggestions()
                                 if (clipMenuRows().isEmpty()) clipMenuOpen = false
                             } else {
@@ -3131,10 +3134,12 @@ class DualGridView(context: Context) : View(context) {
                                 sugManageDx < -th -> {
                                     Prefs.addBlacklist(context, word)
                                     Prefs.purgeLearnedValue(context, word)
+                                    tutEvent?.invoke("manageAdd")
                                     Prefs.removePersonal(context, word)
                                 }
                                 sugManageDx > th -> {
                                     Prefs.addPersonal(context, word)
+                                    tutEvent?.invoke("manageAdd")
                                     Prefs.removeBlacklist(context, word)
                                 }
                             }
@@ -3221,6 +3226,7 @@ class DualGridView(context: Context) : View(context) {
                 val candIdx = when (state.cellIndex) { 0 -> 1; 1 -> 0; else -> 2 }
                 if (candIdx == 2 && clipFull.isNotEmpty() && currentToken().isEmpty()) {
                     textTarget?.commit(clipFull)
+                    tutEvent?.invoke("clipPaste")
                     Prefs.touchClipEntry(context, clipFull)
                     undoStack.clear()
                     refreshSuggestions()
@@ -3236,6 +3242,7 @@ class DualGridView(context: Context) : View(context) {
                     return
                 }
                 if (currentToken().isEmpty()) {
+                    tutEvent?.invoke("predictTap")
                     textTarget?.commit(word)
                     textTarget?.commit(" ")
                     undoStack.clear()

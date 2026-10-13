@@ -1,4 +1,12 @@
 <resources>
+    <string name="tutorial_clip_sample">Texto de prueba copiado para el tutorial</string>
+    <string name="tutorial_skip_step">Salta este paso</string>
+    <string name="p13a">Con el campo vacío, la tercera casilla muestra lo último que has copiado. Tócala para pegarlo.</string>
+    <string name="p14a">Desliza abajo (o mantén el dedo) sobre la tercera casilla para abrir el historial de copiados.</string>
+    <string name="p14b">Toca la papelera de una entrada para eliminarla del historial.</string>
+    <string name="p15a">Si el teclado corrige algo que no querías, borra justo después: recuperarás tu palabra y no se volverá a corregir. Pruébalo y continúa.</string>
+    <string name="p16a">Después de un espacio, el centro puede ofrecerte la palabra que suele venir a continuación. Tócala para aceptarla.</string>
+    <string name="p17a">Mantén el dedo sobre una sugerencia y arrastra el botón: verde = diccionario personal, rojo = lista negra.</string>
     <string name="sensitive_hint">Campo sensible: no se guarda nada</string>
     <string name="banner_tutorial">Haz el tutorial tocando aquí</string>
     <string name="app_name">ErgoThumb</string>
@@ -20,8 +28,8 @@
     <string name="corrector_warning_ok">Entendido, activa el corrector</string>
     <string name="no_suggestions">No hay sugerencias disponibles</string>
     <string name="p0a">Ajusta colores, altura e idiomas a tu gusto y toca Continuar.</string>
-    <string name="p1a">Toca solo letras grandes para escribir: %1$s.</string>
-    <string name="p2a">Desliza desde el centro de una tecla hacia una miniletra de la esquina para escribirla.</string>
+    <string name="p1a">Toca solo letras centrales para escribir: %1$s.</string>
+    <string name="p2a">Desliza desde el centro de una tecla hacia una letra de la esquina para escribirla.</string>
     <string name="p2b">Ahora escribe la frase entera: «¿Quién quiere kiwi y chocolate?».</string>
     <string name="p3a">Escribe una frase cualquiera, como harías normalmente.</string>
     <string name="p4a">Desliza hacia la izquierda sobre el espacio para borrar.</string>
@@ -152,8 +160,8 @@
     </string-array>
     <string-array name="tutorial_titles">
         <item>Hazlo tuyo</item>
-        <item>Tocar = letra grande</item>
-        <item>Deslizar = miniletra</item>
+        <item>Letras centrales</item>
+        <item>Letras con gestos</item>
         <item>Escribe como siempre</item>
         <item>Borrar por segmentos</item>
         <item>Rehacer</item>
@@ -163,15 +171,25 @@
         <item>Números y páginas</item>
         <item>Símbolos</item>
         <item>Cambia de idioma</item>
+        <item>Pega de un toque</item>
+        <item>Historial de copiados</item>
+        <item>Deshacer correcciones</item>
+        <item>Predicción</item>
+        <item>Gestión de sugerencias</item>
         <item>Ajustes y cómo ayudar</item>
     </string-array>
     <string-array name="tutorial_descs">
         <item>Antes de empezar, deja el teclado a tu gusto: colores (oscuro y claro), altura, separación, margen inferior e idiomas de la cápsula.</item>
-        <item>Toca las letras grandes para escribirlas. Escribe la palabra CASA tocando solo letras grandes.</item>
-        <item>Las miniletras de las esquinas se escriben deslizando desde el centro hacia su dirección. Escribe la frase «¿Quién quiere kiwi y chocolate?» (el tutorial la verificará). Cuando la tengas, puedes probar otros gestos en cualquier letra sin que pase nada.</item>
-        <item>Ahora escribe una frase cualquiera como si nada. Normalmente no te harán falta gestos: el teclado es rápido incluso tocando solo letras grandes.</item>
+        <item>Toca las letras del centro de cada tecla para escribirlas. Escribe la palabra CASA tocando solo letras centrales.</item>
+        <item>Las letras de las esquinas se escriben deslizando desde el centro hacia su dirección. Escribe la frase «¿Quién quiere kiwi y chocolate?» (el tutorial la verificará). Cuando la tengas, puedes probar otros gestos en cualquier letra sin que pase nada.</item>
+        <item>Ahora escribe una frase cualquiera como si nada. Normalmente no te harán falta gestos: el teclado es rápido incluso tocando solo letras centrales.</item>
         <item>Desliza hacia la izquierda sobre la barra de espacio para borrar. Borra al menos dos frases cortas del texto.</item>
         <item>Desliza hacia la derecha sobre la barra de espacio para rehacer. Recupera al menos lo mismo que has borrado.</item>
+        <item>Con el campo vacío, la tercera casilla de la franja muestra lo último que has copiado. Un solo toque lo pega tal cual, sin abrir menús ni cambiar de app.</item>
+        <item>Deslizando abajo (o manteniendo el dedo) sobre la tercera casilla se abre el historial de copiados recientes. Cada entrada tiene una papelera para eliminarla, y las entradas caducan solas tras una hora sin uso.</item>
+        <item>Cuando el teclado corrija una palabra que no querías, borra justo después de la corrección: recuperarás el texto original y el teclado recordará que no debe volver a corregirla.</item>
+        <item>Si activas la predicción en los ajustes, el teclado aprende qué palabras escribes después de cuáles y te ofrece la siguiente con el campo vacío. Todo se queda en el dispositivo.</item>
+        <item>Manteniendo el dedo sobre una sugerencia aparece un deslizador: arrástralo a la derecha (verde) para guardar la palabra en el diccionario personal, o a la izquierda (rojo) para prohibirla y purgarla del aprendizaje.</item>
         <item>Mantén el dedo en el borde izquierdo mientras deslizas para borrar en continuo. Vacía el párrafo largo.</item>
         <item>Dos deslizamientos arriba seguidos activan el bloque mayúsculas: escribe tres mayúsculas y desactívalo con otro deslizamiento arriba.</item>
         <item>Arrastra el botón redondo para llevar el cursor al final del segundo párrafo y haz un deslizamiento abajo sobre el espacio para insertar un salto de línea.</item>

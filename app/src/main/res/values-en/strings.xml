@@ -1,4 +1,12 @@
 <resources>
+    <string name="tutorial_clip_sample">Sample copied text for the tutorial</string>
+    <string name="tutorial_skip_step">Skip this step</string>
+    <string name="p13a">With an empty field, the third cell shows the last thing you copied. Tap it to paste.</string>
+    <string name="p14a">Swipe down (or long-press) on the third cell to open the clipboard history.</string>
+    <string name="p14b">Tap the trash icon on an entry to remove it from the history.</string>
+    <string name="p15a">If the keyboard corrects something you did not want, delete right after: your word comes back and it will not be corrected again. Try it and continue.</string>
+    <string name="p16a">After a space, the centre may offer the word that usually comes next. Tap it to accept.</string>
+    <string name="p17a">Long-press a suggestion and drag the knob: green = personal dictionary, red = blacklist.</string>
     <string name="sensitive_hint">Sensitive field: nothing is stored</string>
     <string name="banner_tutorial">Take the tutorial by tapping here</string>
     <string name="app_name">ErgoThumb</string>
@@ -20,7 +28,7 @@
     <string name="corrector_warning_ok">Understood, enable the corrector</string>
     <string name="no_suggestions">No suggestions available</string>
     <string name="p0a">Set colors, height and languages to your liking, then tap Continue.</string>
-    <string name="p1a">Tap only big letters to type: %1$s.</string>
+    <string name="p1a">Tap only center letters to type: %1$s.</string>
     <string name="tutorial_target_word">paste</string>
     <string name="p2a">Swipe from the center of a key toward a corner mini-letter to type it.</string>
     <string name="p2b">Now type the whole phrase: \"Who wants kiwi and chocolate?\".</string>
@@ -152,8 +160,8 @@
     </string-array>
     <string-array name="tutorial_titles">
         <item>Make it yours</item>
-        <item>Tap = big letter</item>
-        <item>Swipe = mini letter</item>
+        <item>Center letters</item>
+        <item>Gesture letters</item>
         <item>Type as usual</item>
         <item>Erase by segments</item>
         <item>Redo</item>
@@ -163,15 +171,25 @@
         <item>Numbers and pages</item>
         <item>Symbols</item>
         <item>Switch language</item>
+        <item>Paste with one tap</item>
+        <item>Clipboard history</item>
+        <item>Undo corrections</item>
+        <item>Prediction</item>
+        <item>Managing suggestions</item>
         <item>Settings and how to help</item>
     </string-array>
     <string-array name="tutorial_descs">
         <item>Before starting, make the keyboard yours: colors (dark and light), height, gap, bottom margin and capsule languages.</item>
-        <item>Tap the big letters to type them. Type the word CASA using only big letters.</item>
-        <item>Corner mini letters are typed by swiping from the center toward their direction. Type the phrase \"Who wants kiwi and chocolate?\" (the tutorial will verify it). Once you have it, feel free to try other gestures on any letter.</item>
+        <item>Tap the center letters of each key to type them. Type the word CASA using only center letters.</item>
+        <item>Corner letters are typed by swiping from the center toward their direction. Type the phrase \"Who wants kiwi and chocolate?\" (the tutorial will verify it). Once you have it, feel free to try other gestures on any letter.</item>
         <item>Now type any sentence as if nothing. You usually won\'t need gestures: the keyboard is fast even tapping only big letters.</item>
         <item>Swipe left on the space bar to erase. Erase at least two short sentences of the text.</item>
         <item>Swipe right on the space bar to redo. Recover at least as much as you erased.</item>
+        <item>With an empty field, the third cell of the strip shows the last thing you copied. One tap pastes it as-is, without opening menus or switching apps.</item>
+        <item>Swiping down (or long-pressing) on the third cell opens the recent clipboard history. Each entry has a trash icon to remove it, and entries expire on their own after one hour unused.</item>
+        <item>When the keyboard corrects a word you did not want, delete right after the correction: you get your original text back and the keyboard remembers not to correct it again.</item>
+        <item>If you enable prediction in settings, the keyboard learns which words you type after which and offers the next one with an empty field. Everything stays on-device.</item>
+        <item>Long-pressing a suggestion reveals a slider: drag it right (green) to save the word to your personal dictionary, or left (red) to ban it and purge it from learning.</item>
         <item>Hold your finger at the left edge while sliding to erase continuously. Empty the long paragraph.</item>
         <item>Two quick up-swipes enable caps lock: type three capitals and disable it with another up-swipe.</item>
         <item>Drag the round knob to move the cursor to the end of the second paragraph, then swipe down on space to insert a line break.</item>
