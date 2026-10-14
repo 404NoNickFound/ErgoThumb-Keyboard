@@ -1522,6 +1522,10 @@ class DualGridView(context: Context) : View(context) {
     private var sugManagePointer = -1
     private var sugManageRunnable: Runnable? = null
     private val TUTORIAL_SENTINEL = ""
+    private data class Shred(val x: Float, val y: Float, val vx: Float, val vy: Float, val ch: Char, val t0: Long)
+    private data class Pop(val x: Float, val y: Float, val t0: Long)
+    private val shreds = mutableListOf<Shred>()
+    private val pops = mutableListOf<Pop>()
     private val clipListener = android.content.ClipboardManager.OnPrimaryClipChangedListener {
         if (clipHistOn && context is InputMethodService && !noLearnField) {
             val txt = clipMgr.primaryClip?.takeIf { it.itemCount > 0 }
@@ -2315,6 +2319,112 @@ class DualGridView(context: Context) : View(context) {
         val g = geo()
         return (g.stripH / 2f) / height.coerceAtLeast(1)
     }
+    private fun spawnShreds() {
+        if (!animHelp) return
+        val now = SystemClock.uptimeMillis()
+        val cx = width / 2f
+        for (i in 0 until 6) {
+            shreds.add(Shred(cx + px(6f) * (i - 2.5f), height - px(150f),
+                px(2f) * (i - 2.5f), px(140f), "aeioust"[i], now))
+        }
+        kickAnim()
+    }
+
+    private fun spawnPop() {
+        if (!animHelp) return
+        pops.add(Pop(width / 2f, height - px(120f), SystemClock.uptimeMillis()))
+        kickAnim()
+    }
+
+    private fun drawParticles(canvas: Canvas, now: Long) {
+        val life = 500L
+        shreds.removeAll { now - it.t0 > life }
+        pops.removeAll { now - it.t0 > life }
+        if (shreds.isEmpty() && pops.isEmpty()) return
+        letterPaint.textSize = px(14f)
+        letterPaint.typeface = fontRegular
+        letterPaint.color = theme.hint
+        for (s in shreds) {
+            val t = (now - s.t0) / life.toFloat()
+            letterPaint.alpha = (255 * (1f - t)).toInt()
+            canvas.drawText(s.ch.toString(), s.x + s.vx * t, s.y + s.vy * t * t, letterPaint)
+        }
+        letterPaint.alpha = 255
+        val oldTick = tickPaint.style
+        tickPaint.style = Paint.Style.STROKE
+        for (p in pops) {
+            val t = (now - p.t0) / life.toFloat()
+            val r = px(10f) + px(30f) * t
+            tickPaint.color = theme.hint
+            tickPaint.alpha = (255 * (1f - t)).toInt()
+            tickPaint.strokeWidth = px(2f)
+            for (i in 0 until 8) {
+                val a = i * (Math.PI / 4.0).toFloat()
+                val ca = Math.cos(a.toDouble()).toFloat()
+                val sa = Math.sin(a.toDouble()).toFloat()
+                canvas.drawLine(p.x + ca * r, p.y + sa * r,
+                    p.x + ca * (r + px(6f)), p.y + sa * (r + px(6f)), tickPaint)
+            }
+        }
+        tickPaint.alpha = 255
+        tickPaint.style = oldTick
+        if (shreds.isNotEmpty() || pops.isNotEmpty()) kickAnim()
+    }
+
+    private fun drawEraseRedoOverlay(canvas: Canvas, g: Geo, eraseT: Float, redoT: Float) {
+        val t = maxOf(eraseT, redoT)
+        keycapPaint.color = blendColor(theme.role[Themes.BG], 0xFF000000.toInt(), 0.5f * t)
+        canvas.drawRect(0f, g.suggestRect.bottom, width.toFloat(), height.toFloat(), keycapPaint)
+        val cx = width / 2f
+        val cy = height - px(120f)
+        val s = px(30f)
+        val oldStyle = iconPaint.style
+        val oldCap = iconPaint.strokeCap
+        iconPaint.style = Paint.Style.STROKE
+        iconPaint.strokeCap = Paint.Cap.ROUND
+        iconPaint.color = theme.text
+        if (eraseT >= redoT) {
+            iconPaint.strokeWidth = px(3.5f)
+            val topW = s * 1.15f
+            val botW = s * 0.8f
+            val bt = cy - s * 0.45f
+            val bb = cy + s * 0.85f
+            val rr = px(4f)
+            val body = Path().apply {
+                moveTo(cx - topW / 2f, bt)
+                lineTo(cx + topW / 2f, bt)
+                lineTo(cx + botW / 2f, bb - rr)
+                quadTo(cx + botW / 2f, bb, cx + botW / 2f - rr, bb)
+                lineTo(cx - botW / 2f + rr, bb)
+                quadTo(cx - botW / 2f, bb, cx - botW / 2f, bb - rr)
+                close()
+            }
+            canvas.drawPath(body, iconPaint)
+            val inset = s * 0.18f
+            for (fx in floatArrayOf(-0.32f, 0f, 0.32f)) {
+                val x = cx + topW * fx * 0.5f
+                canvas.drawLine(x, bt + inset, x, bb - inset, iconPaint)
+            }
+            val lidY = bt - px(5f)
+            val lidL = cx - topW / 2f - px(3f)
+            val lidR = cx + topW / 2f + px(3f)
+            canvas.save()
+            canvas.rotate(-55f * eraseT, lidL, lidY)
+            canvas.drawLine(lidL, lidY, lidR, lidY, iconPaint)
+            val nh = px(7f)
+            canvas.drawLine(cx - nh, lidY, cx - nh, lidY - px(5f), iconPaint)
+            canvas.drawLine(cx - nh, lidY - px(5f), cx + nh, lidY - px(5f), iconPaint)
+            canvas.drawLine(cx + nh, lidY - px(5f), cx + nh, lidY, iconPaint)
+            canvas.restore()
+        } else {
+            val ps = s * (0.45f + 0.85f * redoT)
+            iconPaint.strokeWidth = px(5f)
+            canvas.drawLine(cx - ps, cy, cx + ps, cy, iconPaint)
+            canvas.drawLine(cx, cy - ps, cx, cy + ps, iconPaint)
+        }
+        iconPaint.strokeCap = oldCap
+        iconPaint.style = oldStyle
+    }
     private fun drawIncognito(canvas: Canvas, r: RectF) {
         val cy = r.centerY()
         val s = px(10f)
@@ -2852,6 +2962,11 @@ class DualGridView(context: Context) : View(context) {
             }
             textPaint.textAlign = Paint.Align.CENTER
         }
+        val manageTh = px(60f)
+        val eraseT = if (sugManageIndex in 0..2 && sugManageDx < 0f) (-sugManageDx / manageTh).coerceIn(0f, 1f) else 0f
+        val redoT = if (sugManageIndex in 0..2 && sugManageDx > 0f) (sugManageDx / manageTh).coerceIn(0f, 1f) else 0f
+        if (maxOf(eraseT, redoT) > 0.05f) drawEraseRedoOverlay(canvas, g, eraseT, redoT)
+        drawParticles(canvas, now)
 
         if (caseAnimStart >= 0L && caseT >= 1f) caseAnimStart = -1L
         if (anyAnimActive(now)) kickAnim()
@@ -2988,8 +3103,10 @@ class DualGridView(context: Context) : View(context) {
                         sugPressPointer = id
                         sugOpenRunnable = Runnable {
                             tryOpenClipMenu(true)
+                            sugPressPointer = -1
                         }
                         handler.postDelayed(sugOpenRunnable!!, LONG_PRESS_MS)
+                        kickAnim()
                     } else if (cellIndex == 0 || cellIndex == 1) {
                         val cell = cellIndex
                         sugManagePointer = id
@@ -2999,6 +3116,7 @@ class DualGridView(context: Context) : View(context) {
                             kickAnim()
                         }
                         handler.postDelayed(sugManageRunnable!!, LONG_PRESS_MS)
+                        kickAnim()
                     }
                 }
             }
@@ -3136,11 +3254,13 @@ class DualGridView(context: Context) : View(context) {
                                     Prefs.purgeLearnedValue(context, word)
                                     tutEvent?.invoke("manageAdd")
                                     Prefs.removePersonal(context, word)
+                                    spawnShreds()
                                 }
                                 sugManageDx > th -> {
                                     Prefs.addPersonal(context, word)
                                     tutEvent?.invoke("manageAdd")
                                     Prefs.removeBlacklist(context, word)
+                                    spawnPop()
                                 }
                             }
                             blacklist = Prefs.blacklist(context)
@@ -3340,6 +3460,7 @@ class DualGridView(context: Context) : View(context) {
                         }
                     }
                     slides.add(GlyphSlide(Icon.BACK, dir, SystemClock.uptimeMillis()))
+                    spawnShreds()
                     kickAnim()
                 }
                 SwipeDir.E -> {
@@ -3351,6 +3472,7 @@ class DualGridView(context: Context) : View(context) {
                         }
                     }
                     slides.add(GlyphSlide(Icon.REDO, dir, SystemClock.uptimeMillis()))
+                    spawnPop()
                     kickAnim()
                 }
                 SwipeDir.S, SwipeDir.SE, SwipeDir.SW -> {

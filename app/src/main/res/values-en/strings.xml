@@ -30,7 +30,7 @@
     <string name="p0a">Set colors, height and languages to your liking, then tap Continue.</string>
     <string name="p1a">Tap only center letters to type: %1$s.</string>
     <string name="tutorial_target_word">paste</string>
-    <string name="p2a">Swipe from the center of a key toward a corner mini-letter to type it.</string>
+    <string name="p2a">Swipe from the center of a key toward a corner letter to type it.</string>
     <string name="p2b">Now type the whole phrase: \"Who wants kiwi and chocolate?\".</string>
     <string name="p3a">Type any sentence, as you normally would.</string>
     <string name="p4a">Swipe left over the space to erase.</string>
