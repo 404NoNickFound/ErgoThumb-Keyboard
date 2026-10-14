@@ -6,7 +6,7 @@
     <string name="p14b">Toca l\'escombra d\'una entrada per eliminar-la de l\'historial.</string>
     <string name="p15a">Si el teclat corregeix algo que no volies, esborra just després: recuperaràs la teva paraula i no es tornarà a corregir. Prova-ho i continua.</string>
     <string name="p16a">Després d\'un espai, el centre pot oferir-te la paraula que sol venir a continuació. Toca-la per acceptar-la.</string>
-    <string name="p17a">Mantén el dit sobre un suggeriment i arrossega el botó: verd = diccionari personal, vermell = llista negra.</string>
+    <string name="p17a">Llisca un suggeriment cap a la dreta (verd) per guardar-lo al diccionari personal, o cap a l\'esquerra (vermell) per prohibir-lo i purgar-lo.</string>
     <string name="sensitive_hint">Camp sensible: no es guarda res</string>
     <string name="banner_tutorial">Fes el tutorial tocant aquí</string>
     <string name="app_name">ErgoThumb</string>
@@ -189,7 +189,7 @@
         <item>Lliscant avall (o mantenint el dit) sobre la tercera casella s\'obre l\'historial de copiats recents. Cada entrada té una escombra per eliminar-la, i les entrades caduquen soles al cap d\'una hora sense ús.</item>
         <item>Quan el teclat corregeixi una paraula que no volies, esborra just després de la correcció: recuperaràs el text original i el teclat recordarà que no l\'ha de tornar a corregir.</item>
         <item>Si actives la predicció als ajustos, el teclat aprèn quines paraules escrius després de quines i t\'ofereix la següent amb el camp buit. Tot es queda al dispositiu.</item>
-        <item>Mantenint el dit sobre un suggeriment apareix un lliscador: arrossega\'l cap a la dreta (verd) per guardar la paraula al diccionari personal, o cap a l\'esquerra (vermell) per prohibir-la i purgar-la de l\'aprenentatge.</item>
+        <item>Llisca un suggeriment cap a la dreta (verd) per guardar la paraula al diccionari personal, o cap a l\'esquerra (vermell) per prohibir-la i purgar-la de l\'aprenentatge. És el gest de gestió: ràpid i sense mantenir el dit.</item>
         <item>Mantén el dit a la vora esquerra mentre llisques per esborrar en continu. Buida el paràgraf llarg.</item>
         <item>Dos lliscaments amunt seguits activen el bloc majúscules: escriu tres majúscules i desactiva\'l amb un altre llisc amunt.</item>
         <item>Arrossega el botó rodó per portar el cursor al final del segon paràgraf i fes un llisc avall sobre l\'espai per inserir un salt de línia.</item>

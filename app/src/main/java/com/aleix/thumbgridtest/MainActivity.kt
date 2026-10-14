@@ -3107,16 +3107,6 @@ class DualGridView(context: Context) : View(context) {
                         }
                         handler.postDelayed(sugOpenRunnable!!, LONG_PRESS_MS)
                         kickAnim()
-                    } else if (cellIndex == 0 || cellIndex == 1) {
-                        val cell = cellIndex
-                        sugManagePointer = id
-                        sugManageRunnable = Runnable {
-                            sugManageIndex = cell
-                            sugManageDx = 0f
-                            kickAnim()
-                        }
-                        handler.postDelayed(sugManageRunnable!!, LONG_PRESS_MS)
-                        kickAnim()
                     }
                 }
             }
@@ -3145,6 +3135,16 @@ class DualGridView(context: Context) : View(context) {
                         sugManageRunnable?.let { handler.removeCallbacks(it) }
                         sugManageRunnable = null
                         sugManagePointer = -1
+                    }
+                    if (state.zone == Zone.SUGGEST && sugManageIndex < 0) {
+                        val ddx = x - state.startX
+                        val ddy = y - state.startY
+                        if (abs(ddx) > abs(ddy) && hypot(ddx, ddy) > swipeThreshold) {
+                            sugManageIndex = state.cellIndex
+                            sugManagePointer = id
+                            sugManageDx = ddx
+                            kickAnim()
+                        }
                     }
 
                     if (state.zone == Zone.SLIDER) {

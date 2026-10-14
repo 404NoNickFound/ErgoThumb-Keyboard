@@ -6,7 +6,7 @@
     <string name="p14b">Toca la papelera de una entrada para eliminarla del historial.</string>
     <string name="p15a">Si el teclado corrige algo que no querías, borra justo después: recuperarás tu palabra y no se volverá a corregir. Pruébalo y continúa.</string>
     <string name="p16a">Después de un espacio, el centro puede ofrecerte la palabra que suele venir a continuación. Tócala para aceptarla.</string>
-    <string name="p17a">Mantén el dedo sobre una sugerencia y arrastra el botón: verde = diccionario personal, rojo = lista negra.</string>
+    <string name="p17a">Desliza una sugerencia hacia la derecha (verde) para guardarla en el diccionario personal, o hacia la izquierda (rojo) para prohibirla y purgarla.</string>
     <string name="sensitive_hint">Campo sensible: no se guarda nada</string>
     <string name="banner_tutorial">Haz el tutorial tocando aquí</string>
     <string name="app_name">ErgoThumb</string>
@@ -189,7 +189,7 @@
         <item>Deslizando abajo (o manteniendo el dedo) sobre la tercera casilla se abre el historial de copiados recientes. Cada entrada tiene una papelera para eliminarla, y las entradas caducan solas tras una hora sin uso.</item>
         <item>Cuando el teclado corrija una palabra que no querías, borra justo después de la corrección: recuperarás el texto original y el teclado recordará que no debe volver a corregirla.</item>
         <item>Si activas la predicción en los ajustes, el teclado aprende qué palabras escribes después de cuáles y te ofrece la siguiente con el campo vacío. Todo se queda en el dispositivo.</item>
-        <item>Manteniendo el dedo sobre una sugerencia aparece un deslizador: arrástralo a la derecha (verde) para guardar la palabra en el diccionario personal, o a la izquierda (rojo) para prohibirla y purgarla del aprendizaje.</item>
+        <item>Desliza una sugerencia hacia la derecha (verde) para guardar la palabra en el diccionario personal, o hacia la izquierda (rojo) para prohibirla y purgarla del aprendizaje. Es el gesto de gestión: rápido y sin mantener el dedo.</item>
         <item>Mantén el dedo en el borde izquierdo mientras deslizas para borrar en continuo. Vacía el párrafo largo.</item>
         <item>Dos deslizamientos arriba seguidos activan el bloque mayúsculas: escribe tres mayúsculas y desactívalo con otro deslizamiento arriba.</item>
         <item>Arrastra el botón redondo para llevar el cursor al final del segundo párrafo y haz un deslizamiento abajo sobre el espacio para insertar un salto de línea.</item>
