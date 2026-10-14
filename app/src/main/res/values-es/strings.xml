@@ -1,4 +1,5 @@
 <resources>
+    <string name="anim_off">Sin animaciones</string>
     <string name="tutorial_clip_sample">Texto de prueba copiado para el tutorial</string>
     <string name="tutorial_skip_step">Salta este paso</string>
     <string name="p13a">Con el campo vacío, la tercera casilla muestra lo último que has copiado. Tócala para pegarlo.</string>

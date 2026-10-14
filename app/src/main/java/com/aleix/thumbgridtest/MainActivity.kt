@@ -730,7 +730,7 @@ class SettingsActivity : AppCompatActivity() {
         mSwitch(R.string.switch_hints, Prefs.showHints(this)) { putB(Prefs.KEY_SHOW_HINTS, it) }
 
         section(R.string.section_animations)
-        mSlider(R.string.slider_anim_scale, 50f, 200f, Prefs.animScale(this),
+        mSlider(R.string.slider_anim_scale, 0f, 200f, Prefs.animScale(this),
             { getString(R.string.fmt_percent, it.toInt()) })
         { v -> putF(Prefs.KEY_ANIM_SCALE, v) }
         mSlider(R.string.slider_case_ms, 0f, 500f, Prefs.caseMs(this),
