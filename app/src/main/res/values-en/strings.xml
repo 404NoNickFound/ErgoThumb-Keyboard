@@ -1,5 +1,11 @@
 <resources>
+    <string name="section_info">Information</string>
+    <string name="info_version">Version: %1$s</string>
+    <string name="info_developer">Developer: 404NoNickFound</string>
+    <string name="info_license">Code: GPL-3.0-or-later · Fonts: Outfit (OFL) · Dictionaries: FrequencyWords</string>
     <string name="anim_off">No animations</string>
+    <string name="switch_accent_custom">Custom highlight (ignores keyboard color)</string>
+    <string name="accent_pick">Pick the highlight color</string>
     <string name="tutorial_clip_sample">Sample copied text for the tutorial</string>
     <string name="tutorial_skip_step">Skip this step</string>
     <string name="p13a">With an empty field, the third cell shows the last thing you copied. Tap it to paste.</string>

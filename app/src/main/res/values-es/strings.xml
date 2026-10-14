@@ -1,5 +1,11 @@
 <resources>
+    <string name="section_info">Información</string>
+    <string name="info_version">Versión: %1$s</string>
+    <string name="info_developer">Desarrollador: 404NoNickFound</string>
+    <string name="info_license">Código: GPL-3.0-or-later · Fuentes: Outfit (OFL) · Diccionarios: FrequencyWords</string>
     <string name="anim_off">Sin animaciones</string>
+    <string name="switch_accent_custom">Resaltado personalizado (ignora el color del teclado)</string>
+    <string name="accent_pick">Elige el color de resaltado</string>
     <string name="tutorial_clip_sample">Texto de prueba copiado para el tutorial</string>
     <string name="tutorial_skip_step">Salta este paso</string>
     <string name="p13a">Con el campo vacío, la tercera casilla muestra lo último que has copiado. Tócala para pegarlo.</string>

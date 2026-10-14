@@ -61,6 +61,8 @@ object Prefs {
     const val KEY_APP_LANG = "app_lang"
     const val KEY_COLOR_DARK = "color_dark"
     const val KEY_COLOR_LIGHT = "color_light"
+    const val KEY_ACCENT_ON = "accent_on"
+    const val KEY_ACCENT_COLOR = "accent_color"
     const val KEY_SPACEBAR_H = "spacebar_h"
     const val KEY_TUTORIAL_DONE = "tutorial_done"
     const val KEY_ERASE_PRECISION = "erase_precision"
@@ -123,6 +125,8 @@ object Prefs {
     fun appLang(ctx: Context) = prefs(ctx).getString(KEY_APP_LANG, "ca") ?: "ca"
     fun colorDark(ctx: Context) = prefs(ctx).getInt(KEY_COLOR_DARK, 0)
     fun colorLight(ctx: Context) = prefs(ctx).getInt(KEY_COLOR_LIGHT, 0)
+    fun accentOn(ctx: Context) = prefs(ctx).getBoolean(KEY_ACCENT_ON, false)
+    fun accentColor(ctx: Context) = prefs(ctx).getInt(KEY_ACCENT_COLOR, 0)
     fun spaceBarH(ctx: Context) = prefs(ctx).getFloat(KEY_SPACEBAR_H, DEFAULT_SPACEBAR_H)
     fun tutorialDone(ctx: Context) = prefs(ctx).getBoolean(KEY_TUTORIAL_DONE, false)
     fun erasePrecision(ctx: Context) = prefs(ctx).getBoolean(KEY_ERASE_PRECISION, false)
@@ -421,7 +425,9 @@ object Themes {
         val dist = colorDist(raw, base.pole)
         val eff = if (dist < 0.30f)
             blendColor(raw, if (night) Color.WHITE else Color.BLACK, 0.55f) else raw
-        return if (eff == base.principal) base else base.withPrincipal(eff)
+        val acc = if (Prefs.accentOn(ctx)) Prefs.accentColor(ctx) else 0
+        val finalPrincipal = if (acc != 0) acc else eff
+        return if (finalPrincipal == base.principal) base else base.withPrincipal(finalPrincipal)
     }
 
     private fun colorDist(a: Int, b: Int): Float {
@@ -624,7 +630,7 @@ class SettingsActivity : AppCompatActivity() {
             R.string.section_languages, R.string.section_appearance,
             R.string.section_geometry, R.string.section_sensitivity,
             R.string.section_comfort, R.string.section_animations,
-            R.string.section_advanced, R.string.section_help
+            R.string.section_advanced, R.string.section_info
         )
     }
 
@@ -636,6 +642,9 @@ class SettingsActivity : AppCompatActivity() {
     private var poleCol = Color.BLACK
     private val sectionHeaders = mutableListOf<TextView>()
     private val sectionContainers = mutableListOf<LinearLayout>()
+    private val sectionTitleRes = mutableListOf<Int>()
+    private var bgCol = Color.BLACK
+    private var textCol = Color.WHITE
     private lateinit var corrSw: MaterialSwitch
     private lateinit var nwSw: MaterialSwitch
 
@@ -670,6 +679,8 @@ class SettingsActivity : AppCompatActivity() {
         window.statusBarColor = bgColor
         window.navigationBarColor = bgColor
         scroll.setBackgroundColor(bgColor)
+        bgCol = bgColor
+        textCol = th.text
         root.setBackgroundColor(bgColor)
 
         root.addView(TextView(this).apply {
@@ -745,7 +756,7 @@ class SettingsActivity : AppCompatActivity() {
         section(R.string.section_advanced)
         bigramsBlock()
 
-        section(R.string.section_help)
+        section(R.string.section_info)
         add(MaterialButton(this).apply {
             text = getString(R.string.help_replay)
             setOnClickListener {
@@ -755,6 +766,29 @@ class SettingsActivity : AppCompatActivity() {
         add(MaterialButton(this).apply {
             text = getString(R.string.help_github)
             setOnClickListener { openGithub() }
+        })
+        add(TextView(this).apply {
+            val vn = try {
+                packageManager.getPackageInfo(packageName, 0).versionName ?: "?"
+            } catch (e: Exception) {
+                "?"
+            }
+            text = getString(R.string.info_version, vn)
+            textSize = 14f
+            setTextColor(Color.GRAY)
+            setPadding(0, 16, 0, 0)
+        })
+        add(TextView(this).apply {
+            text = getString(R.string.info_developer)
+            textSize = 14f
+            setTextColor(Color.GRAY)
+            setPadding(0, 8, 0, 0)
+        })
+        add(TextView(this).apply {
+            text = getString(R.string.info_license)
+            textSize = 14f
+            setTextColor(Color.GRAY)
+            setPadding(0, 8, 0, 0)
         })
 
         // --- Corrector (C1): al final per no desindexar el tour/focus ---
@@ -854,27 +888,91 @@ class SettingsActivity : AppCompatActivity() {
         currentContainer.addView(v)
     }
 
-    private fun section(titleRes: Int, expanded: Boolean = true) {
+    private fun section(titleRes: Int, expanded: Boolean = false) {
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            visibility = if (expanded) View.VISIBLE else View.GONE
+            visibility = View.GONE
         }
         val header = TextView(this).apply {
-            text = (if (expanded) "▼  " else "▶  ") + getString(titleRes)
+            text = "▶  " + getString(titleRes)
             textSize = 15f
-            setTextColor(Color.parseColor("#8E8E93"))
-            setPadding(0, 40, 0, 12)
-            setOnClickListener {
-                val show = container.visibility == View.GONE
-                container.visibility = if (show) View.VISIBLE else View.GONE
-                text = (if (show) "▼  " else "▶  ") + getString(titleRes)
-            }
+            setTextColor(textCol)
+            val gd = android.graphics.drawable.GradientDrawable()
+            gd.cornerRadius = 999f
+            gd.setColor(blendColor(bgCol, textCol, 0.10f))
+            background = gd
+            setPadding(28, 16, 28, 16)
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            lp.topMargin = 20
+            lp.bottomMargin = 10
+            layoutParams = lp
         }
         root.addView(header)
         root.addView(container)
         currentContainer = container
         sectionHeaders.add(header)
         sectionContainers.add(container)
+        sectionTitleRes.add(titleRes)
+        val idx = sectionContainers.size - 1
+        header.setOnClickListener {
+            toggleSection(idx, container.visibility != View.VISIBLE)
+        }
+        if (expanded) setSectionOpen(idx, true)
+    }
+    private fun animOn() = Prefs.animScale(this) > 0f
+
+    private fun toggleSection(idx: Int, open: Boolean) {
+        if (open) {
+            for (i in sectionContainers.indices) {
+                if (i != idx && sectionContainers[i].visibility == View.VISIBLE) setSectionOpen(i, false)
+            }
+        }
+        setSectionOpen(idx, open)
+    }
+
+    private fun setSectionOpen(idx: Int, open: Boolean) {
+        val container = sectionContainers[idx]
+        val header = sectionHeaders[idx]
+        header.text = (if (open) "▼  " else "▶  ") + getString(sectionTitleRes[idx])
+        val lp = container.layoutParams
+        if (!animOn()) {
+            container.visibility = if (open) View.VISIBLE else View.GONE
+            lp.height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+            container.layoutParams = lp
+            return
+        }
+        if (open) {
+            container.visibility = View.VISIBLE
+            val wSpec = View.MeasureSpec.makeMeasureSpec(
+                root.width - root.paddingLeft - root.paddingRight, View.MeasureSpec.EXACTLY)
+            val hSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+            container.measure(wSpec, hSpec)
+            val va = android.animation.ValueAnimator.ofInt(0, container.measuredHeight)
+            va.duration = 180
+            va.addUpdateListener { lp.height = it.animatedValue as Int; container.layoutParams = lp }
+            va.addListener(object : android.animation.AnimatorListenerAdapter() {
+                override fun onAnimationEnd(a: android.animation.Animator) {
+                    lp.height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+                    container.layoutParams = lp
+                }
+            })
+            va.start()
+        } else {
+            val va = android.animation.ValueAnimator.ofInt(container.height, 0)
+            va.duration = 150
+            va.addUpdateListener { lp.height = it.animatedValue as Int; container.layoutParams = lp }
+            va.addListener(object : android.animation.AnimatorListenerAdapter() {
+                override fun onAnimationEnd(a: android.animation.Animator) {
+                    container.visibility = View.GONE
+                    lp.height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+                    container.layoutParams = lp
+                }
+            })
+            va.start()
+        }
     }
 
     private fun mSwitch(labelRes: Int, current: Boolean, onValue: (Boolean) -> Unit): MaterialSwitch {
@@ -927,6 +1025,26 @@ class SettingsActivity : AppCompatActivity() {
         add(label(R.string.color_light_row))
         add(swatchRow(isDark = false))
         add(customColorButton(isDark = false))
+        val accentSw = mSwitch(R.string.switch_accent_custom, Prefs.accentOn(this)) { v ->
+            getSharedPreferences(Prefs.NAME, MODE_PRIVATE).edit()
+                .putBoolean(Prefs.KEY_ACCENT_ON, v).apply()
+            recreate()
+        }
+        val accentBtn = MaterialButton(this).apply {
+            text = getString(R.string.accent_pick)
+            setOnClickListener {
+                ColorPickerDialog(this@SettingsActivity,
+                    Themes.current(this@SettingsActivity).isDark,
+                    Prefs.accentColor(this@SettingsActivity)) { color ->
+                    getSharedPreferences(Prefs.NAME, MODE_PRIVATE).edit()
+                        .putInt(Prefs.KEY_ACCENT_COLOR, color).apply()
+                    recreate()
+                }.show()
+            }
+        }
+        add(accentBtn)
+        accentBtn.isEnabled = accentSw.isChecked
+        accentBtn.alpha = if (accentSw.isChecked) 1f else 0.35f
     }
 
     private fun label(res: Int): TextView = TextView(this).apply {
