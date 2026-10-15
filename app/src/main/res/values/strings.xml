@@ -1,4 +1,15 @@
 <resources>
+    <string name="ob1_title">ErgoThumb és una app pensada per a la comoditat d\'escriure</string>
+    <string name="ob1_body">Totes les lletres importants són a un toc, i les menys freqüents surten amb gestos naturals de la mà.</string>
+    <string name="ob1_more">Gràcies a això, es fa més còmoda l\'escriptura tant en sessions prolongades com en missatges ràpids.</string>
+    <string name="ob2_title">Una nova manera d\'escriure</string>
+    <string name="ob2_body">Es pot sentir més complicat a l\'inici que els altres teclats, però en poc temps pots arribar a anar més ràpid i més còmodament. Només cal deixar-li una oportunitat, i s\'enganxa ràpid!</string>
+    <string name="ob3_title">Exclusivament teu</string>
+    <string name="ob3_body">Tens una configuració tan estesa com vulguis per fer el teclat exclusivament teu i únic. Tens tot el que et cal per a ajustar-ho a la teva mà.</string>
+    <string name="ob4_title">Un tutorial per ajudar-te</string>
+    <string name="ob4_body">Ara tindràs un tutorial per aprendre a fer servir el teclat i que et resulti més fàcil enxampar-ne el funcionament. El pots repetir sempre que vulguis a l\'apartat d\'informació de la configuració.</string>
+    <string name="ob_more">Més informació</string>
+    <string name="gen_text">Genera text</string>
     <string name="section_info">Informació</string>
     <string name="info_version">Versió: %1$s</string>
     <string name="info_developer">Desenvolupador: 404NoNickFound</string>

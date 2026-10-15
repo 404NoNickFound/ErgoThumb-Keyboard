@@ -127,6 +127,10 @@ object Prefs {
     fun colorLight(ctx: Context) = prefs(ctx).getInt(KEY_COLOR_LIGHT, 0)
     fun accentOn(ctx: Context) = prefs(ctx).getBoolean(KEY_ACCENT_ON, false)
     fun accentColor(ctx: Context) = prefs(ctx).getInt(KEY_ACCENT_COLOR, 0)
+    const val KEY_ONBOARD_SHOWN = "onboard_shown"
+    fun onboardShown(ctx: Context) = prefs(ctx).getBoolean(KEY_ONBOARD_SHOWN, false)
+    fun setOnboardShown(ctx: Context, v: Boolean) =
+        prefs(ctx).edit().putBoolean(KEY_ONBOARD_SHOWN, v).apply()
     fun spaceBarH(ctx: Context) = prefs(ctx).getFloat(KEY_SPACEBAR_H, DEFAULT_SPACEBAR_H)
     fun tutorialDone(ctx: Context) = prefs(ctx).getBoolean(KEY_TUTORIAL_DONE, false)
     fun erasePrecision(ctx: Context) = prefs(ctx).getBoolean(KEY_ERASE_PRECISION, false)
@@ -468,7 +472,10 @@ class MainActivity : AppCompatActivity() {
             setContentView(buildChooser())
             return
         }
-
+        if (!Prefs.onboardShown(this)) {
+            setContentView(buildOnboarding())
+            return
+        }
         if (!Prefs.tutorialDone(this)) {
             startActivity(Intent(this, TutorialActivity::class.java))
             finish()
@@ -483,6 +490,7 @@ class MainActivity : AppCompatActivity() {
             setTextColor(Color.WHITE)
             setHintTextColor(Color.GRAY)
             hint = getString(R.string.test_hint)
+            maxLines = 8
             setBackgroundColor(Color.parseColor("#222222"))
             setPadding(32, 24, 32, 24)
             onSel = { if (::dualGridView.isInitialized) dualGridView.invalidate() }
@@ -498,7 +506,12 @@ class MainActivity : AppCompatActivity() {
                 startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
             }
         }
-
+        val genButton = MaterialButton(this).apply {
+            text = getString(R.string.gen_text)
+            setOnClickListener {
+                editText.append(genParagraphs.random() + "\n\n")
+            }
+        }
         val spacer = View(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
@@ -567,16 +580,108 @@ class MainActivity : AppCompatActivity() {
             addView(editText)
             addView(enableButton)
             addView(settingsButton)
+            addView(genButton)
             addView(spacer)
             addView(dualGridView)
         }
 
-        enableButton.backgroundTintList = ColorStateList.valueOf(th.buttonBg())
-        settingsButton.backgroundTintList = ColorStateList.valueOf(th.buttonBg())
-        enableButton.setTextColor(th.text)
-        settingsButton.setTextColor(th.text)
-        editText.setBackgroundColor(blendColor(bgColor, th.text, 0.10f))
+        for (b in listOf(enableButton, settingsButton, genButton)) {
+            b.backgroundTintList = ColorStateList.valueOf(th.buttonBg())
+            b.setTextColor(th.text)
+            b.cornerRadius = 999
+        }
+        val edBg = android.graphics.drawable.GradientDrawable()
+        edBg.cornerRadius = 16 * resources.displayMetrics.density
+        edBg.setColor(blendColor(bgColor, th.text, 0.10f))
+        editText.background = edBg
         setContentView(root)
+    }
+    private val genParagraphs = listOf(
+        "La llum del matí entrava per la finestra mentre el teclat repicava sense pressa, i cada paraula trobava el seu lloc com si sempre l'hagués esperat.",
+        "De vegades escriure és només deixar que els dits recordin el camí: cap amunt per les majúscules, cap a l'esquerra per esborrar, cap al centre per continuar.",
+        "El gat dormia sobre la taula, aliè als missatges que anaven i venien, i de tant en tant obria un ull per comprovar que seguíem escrivint.",
+        "Quan el vespre arribava, les frases curtes deixaven pas a paràgrafs sencers, i el teclat aguantava el ritme sense queixar-se ni una sola vegada."
+    )
+
+    private fun buildOnboarding(): View {
+        val th = Themes.current(this)
+        val bgColor = th.appBg()
+        window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(bgColor))
+        window.statusBarColor = bgColor
+        window.navigationBarColor = bgColor
+        val scroll = ScrollView(this).apply { setBackgroundColor(bgColor) }
+        val col = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(48, 64, 48, 48)
+        }
+        val cards = listOf(
+            Triple(R.string.ob1_title, R.string.ob1_body, R.string.ob1_more),
+            Triple(R.string.ob2_title, R.string.ob2_body, -1),
+            Triple(R.string.ob3_title, R.string.ob3_body, -1),
+            Triple(R.string.ob4_title, R.string.ob4_body, -1)
+        )
+        for ((tRes, bRes, mRes) in cards) {
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(32, 28, 32, 28)
+                val gd = android.graphics.drawable.GradientDrawable()
+                gd.cornerRadius = 16 * resources.displayMetrics.density
+                gd.setColor(blendColor(bgColor, th.text, 0.08f))
+                background = gd
+                val lp = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT)
+                lp.bottomMargin = 24
+                layoutParams = lp
+            }
+            card.addView(TextView(this).apply {
+                text = getString(tRes)
+                textSize = 18f
+                setTextColor(th.text)
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+            })
+            card.addView(TextView(this).apply {
+                text = getString(bRes)
+                textSize = 14f
+                setTextColor(th.hint)
+                setPadding(0, 12, 0, 0)
+            })
+            if (mRes != -1) {
+                val more = TextView(this).apply {
+                    text = getString(mRes)
+                    textSize = 13f
+                    setTextColor(th.hint)
+                    setPadding(0, 12, 0, 0)
+                    visibility = View.GONE
+                }
+                val tog = TextView(this).apply {
+                    text = "▸  " + getString(R.string.ob_more)
+                    textSize = 13f
+                    setTextColor(th.principal)
+                    setPadding(0, 12, 0, 0)
+                    setOnClickListener {
+                        val show = more.visibility == View.GONE
+                        more.visibility = if (show) View.VISIBLE else View.GONE
+                        text = (if (show) "▾  " else "▸  ") + getString(R.string.ob_more)
+                    }
+                }
+                card.addView(more)
+                card.addView(tog)
+            }
+            col.addView(card)
+        }
+        col.addView(MaterialButton(this).apply {
+            text = getString(R.string.tutorial_continue)
+            cornerRadius = 999
+            backgroundTintList = ColorStateList.valueOf(th.buttonBg())
+            setTextColor(th.text)
+            setOnClickListener {
+                Prefs.setOnboardShown(this@MainActivity, true)
+                recreate()
+            }
+        })
+        scroll.addView(col)
+        return scroll
     }
 
     private fun buildChooser(): View {
