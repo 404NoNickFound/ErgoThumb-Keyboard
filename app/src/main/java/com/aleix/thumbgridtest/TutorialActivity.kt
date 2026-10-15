@@ -218,6 +218,20 @@ class TutorialActivity : AppCompatActivity() {
         overlay.grid = grid
         gridWrap.addView(grid)
         gridWrap.addView(overlay)
+        run {
+            val pillBg = android.graphics.drawable.GradientDrawable()
+            pillBg.cornerRadius = 999f
+            pillBg.setColor(blendColor(bgColor, th.text, 0.15f))
+            transitionTv.background = pillBg
+            transitionTv.setPadding(40, 20, 40, 20)
+            val tlp = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                android.view.Gravity.CENTER_HORIZONTAL or android.view.Gravity.TOP
+            )
+            tlp.topMargin = (12 * density).toInt()
+            transitionTv.layoutParams = tlp
+        }
         gridWrap.addView(transitionTv)
 
         root.addView(topBar)
@@ -364,6 +378,7 @@ class TutorialActivity : AppCompatActivity() {
         }
         if (removed > 0) {
             transitionTv.text = getString(R.string.tutorial_typo)
+            transitionTv.alpha = 1f
             transitionTv.visibility = View.VISIBLE
             handler.postDelayed({
                 if (!transitioning) transitionTv.visibility = View.GONE
@@ -384,7 +399,7 @@ class TutorialActivity : AppCompatActivity() {
         if (!cur.validate()) return
         if (phase < ph.size - 1) {
             phase++
-            showPhase()
+            crossfadePhase()
         } else {
             advanceStep()
         }
@@ -394,23 +409,49 @@ class TutorialActivity : AppCompatActivity() {
         clipPastes = 0; menuOpens = 0; trashDeletes = 0
         predictTaps = 0; manageAdds = 0
         transitioning = true
+        val sc = Prefs.animScale(this) / 100f
+        val on = sc > 0f
+        val slide = (140f * sc).toLong()
+        val hold = (650f * sc).toLong()
         transitionTv.text = "✓  " + titles.getOrElse(step) { "" }
         transitionTv.visibility = View.VISIBLE
+        if (on) {
+            transitionTv.alpha = 0f
+            transitionTv.animate().alpha(1f).setDuration(slide).start()
+            panel.animate().translationX(-panel.width * 0.12f).alpha(0f)
+                .setDuration(slide).start()
+        } else {
+            transitionTv.alpha = 1f
+        }
         handler.postDelayed({
-            transitionTv.visibility = View.GONE
-            transitioning = false
-            step++
-            phase = 0
-            resetCounters()
-            when {
-                step == 4 || step == 8 -> {
-                    editor.setText(sampleText)
-                    editor.setSelection(editor.text?.length ?: 0)
+            val swap: () -> Unit = {
+                transitioning = false
+                step++
+                phase = 0
+                resetCounters()
+                when {
+                    step == 4 || step == 8 -> {
+                        editor.setText(sampleText)
+                        editor.setSelection(editor.text?.length ?: 0)
+                    }
+                    step in writingSteps -> editor.setText("")
                 }
-                step in writingSteps -> editor.setText("")
+                showPhase()
+                if (on) {
+                    panel.translationX = panel.width * 0.12f
+                    panel.alpha = 0f
+                    panel.animate().translationX(0f).alpha(1f)
+                        .setDuration((180f * sc).toLong()).start()
+                }
             }
-            showPhase()
-        }, 900)
+            if (on) {
+                transitionTv.animate().alpha(0f).setDuration(slide)
+                    .withEndAction { transitionTv.visibility = View.GONE }.start()
+            } else {
+                transitionTv.visibility = View.GONE
+            }
+            swap()
+        }, hold + slide)
     }
 
     private fun resetCounters() {
@@ -419,6 +460,20 @@ class TutorialActivity : AppCompatActivity() {
         cursorMoved = false; enterDone = false
         pageChanged = false; langCycles = 0
         barOpen = false; symOpen = false; capsOnState = false
+    }
+
+    private fun crossfadePhase() {
+        val sc = Prefs.animScale(this) / 100f
+        if (sc <= 0f) { showPhase(); return }
+        val half = (70f * sc).toLong()
+        descTv.animate().alpha(0f).setDuration(half).withEndAction {
+            showPhase()
+            descTv.alpha = 0f
+            titleTv.scaleX = 0.97f
+            titleTv.scaleY = 0.97f
+            descTv.animate().alpha(1f).setDuration(half * 2).start()
+            titleTv.animate().scaleX(1f).scaleY(1f).setDuration(half * 2).start()
+        }.start()
     }
 
     private fun showPhase() {
