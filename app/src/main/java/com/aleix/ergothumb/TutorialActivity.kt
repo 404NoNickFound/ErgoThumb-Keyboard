@@ -1,4 +1,4 @@
-package com.aleix.thumbgridtest
+package com.aleix.ergothumb
 
 import android.content.Intent
 import android.graphics.Color

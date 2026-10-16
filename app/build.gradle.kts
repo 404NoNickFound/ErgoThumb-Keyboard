@@ -3,13 +3,13 @@ plugins {
 }
 
 android {
-    namespace = "com.aleix.thumbgridtest"
+    namespace = "com.aleix.ergothumb"
     compileSdk {
         version = release(37)
     }
 
     defaultConfig {
-        applicationId = "com.aleix.thumbgridtest"
+        applicationId = "com.aleix.ergothumb"
         minSdk = 26
         targetSdk = 37
         versionCode = 1

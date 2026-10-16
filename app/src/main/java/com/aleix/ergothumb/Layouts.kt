@@ -1,4 +1,4 @@
-package com.aleix.thumbgridtest
+package com.aleix.ergothumb
 
 data class KeyDef(
     val tap: String,

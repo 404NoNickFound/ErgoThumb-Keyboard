@@ -1,4 +1,4 @@
-package com.aleix.thumbgridtest
+package com.aleix.ergothumb
 
 import android.app.AlertDialog
 import android.content.Context
