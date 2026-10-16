@@ -3727,7 +3727,6 @@ class DualGridView(context: Context) : View(context) {
                         }
                     }
                     slides.add(GlyphSlide(Icon.BACK, dir, SystemClock.uptimeMillis()))
-                    spawnShreds()
                     kickAnim()
                 }
                 SwipeDir.E -> {
@@ -3739,7 +3738,6 @@ class DualGridView(context: Context) : View(context) {
                         }
                     }
                     slides.add(GlyphSlide(Icon.REDO, dir, SystemClock.uptimeMillis()))
-                    spawnPop()
                     kickAnim()
                 }
                 SwipeDir.S, SwipeDir.SE, SwipeDir.SW -> {
