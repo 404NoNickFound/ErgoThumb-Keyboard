@@ -2165,11 +2165,11 @@ class DualGridView(context: Context) : View(context) {
         val padH = if (compact) px(5f) else px(8f)
         val padV = if (compact) px(5f) else px(8f)
         val gapU = if (compact) px(5f) else px(8f)
-        val stripH = if (compact) height * 0.14f else px(48f)
-        val sliderZone = if (compact) height * 0.17f else px(64f)
+        val stripH = if (compact) height * 0.12f else px(48f)
+        val sliderZone = if (compact) height * 0.14f else px(64f)
         val sliderH = if (compact) sliderZone * 0.5f else px(32f)
         val sugH = if (compact) stripH * 0.78f else px(36f)
-        val bottomExtra = height * (marginBottomPct / 100f)
+        val bottomExtra = height * (marginBottomPct / 100f) + if (land) px(28f) else 0f
         val zoneTop = height - bottomExtra - sliderZone
         val topH = sugH + (stripH - sugH) * barP
         val gridTop = topH
@@ -2359,7 +2359,7 @@ class DualGridView(context: Context) : View(context) {
     }
 
     private fun knobCenterX(g: Geo): Float = g.contentLeft + g.contentWidth / 2f
-    private fun knobD(g: Geo): Float = px(40f)
+    private fun knobD(g: Geo): Float = g.sliderH * 1.25f
     private fun knobTravel(g: Geo): Float {
         val inner = g.contentWidth - 2 * px(16f)
         return inner / 2f - knobD(g) / 2f
@@ -2798,7 +2798,7 @@ class DualGridView(context: Context) : View(context) {
             val cw = g.contentWidth / 10f
             val page = barPages[barPage]
             textPaint.color = theme.text
-            textPaint.textSize = px(20f)
+            textPaint.textSize = g.stripH * 0.40f
             textPaint.typeface = fontMedium
             val yC = -(textPaint.descent() + textPaint.ascent()) / 2f
             for (i in 0..9) {
@@ -2817,7 +2817,7 @@ class DualGridView(context: Context) : View(context) {
             drawIncognito(canvas, topRect)
         } else if (suggestions.isEmpty()) {
             hintPaint.color = theme.hint
-            hintPaint.textSize = px(12f)
+            hintPaint.textSize = g.stripH * 0.25f
             hintPaint.typeface = fontRegular
             val syC = -(hintPaint.descent() + hintPaint.ascent()) / 2f
             canvas.drawText(locStr(R.string.no_suggestions),
@@ -2837,11 +2837,11 @@ class DualGridView(context: Context) : View(context) {
                         RectF(topRect.left + third + px(4f), topRect.top + px(4f),
                             topRect.left + 2 * third - px(4f), topRect.bottom - px(4f)),
                         px(10f), px(10f), keycapPaint)
-                    textPaint.textSize = px(16f)
+                    textPaint.textSize = g.stripH * 0.33f
                     textPaint.typeface = fontSemiBold
                     textPaint.color = theme.text
                 } else {
-                    textPaint.textSize = px(13f)
+                    textPaint.textSize = g.stripH * 0.27f
                     textPaint.typeface = fontRegular
                     textPaint.color = theme.hint
                 }
@@ -2943,7 +2943,7 @@ class DualGridView(context: Context) : View(context) {
 
                     canvas.save()
                     canvas.clipRect(r)
-                    letterPaint.textSize = if (g.land) g.rowH * 0.34f else px(28f)
+                    letterPaint.textSize = if (g.land) g.rowH * 0.31f else px(28f)
                     letterPaint.color = theme.text
                     val yC = -(letterPaint.descent() + letterPaint.ascent()) / 2f
                     val midY = r.centerY() + yC
@@ -3036,7 +3036,7 @@ class DualGridView(context: Context) : View(context) {
                 val fbT = if (fb != null) t01(fb.start, fbDur(), now) else 1f
                 val label = if (fb != null && fbT < 0.75f) fb.char
                 else if (capsVisual) key.tap.uppercase() else key.tap
-                letterPaint.textSize = if (g.land) g.rowH * 0.34f else px(28f)
+                letterPaint.textSize = if (g.land) g.rowH * 0.31f else px(28f)
                 val yC = -(letterPaint.descent() + letterPaint.ascent()) / 2f
                 val centerScale = if (p.sel != SwipeDir.TAP) 0.9f else 1f
                 letterPaint.typeface =
@@ -3139,7 +3139,7 @@ class DualGridView(context: Context) : View(context) {
         keycapPaint.color = theme.role[Themes.SPECIAL]
         canvas.drawRoundRect(capRect, g.capsuleH / 2f, g.capsuleH / 2f, keycapPaint)
         langPaint.color = theme.text
-        langPaint.textSize = px(11f)
+        langPaint.textSize = g.capsuleH * 0.68f
         langPaint.typeface = fontMedium
         val capYC = -(langPaint.descent() + langPaint.ascent()) / 2f
         val capT = if (capsuleAnimStart >= 0L && animStrong)
@@ -3167,8 +3167,8 @@ class DualGridView(context: Context) : View(context) {
         var tx = sliderRect.left + tickSpacing - mod
         while (tx < sliderRect.right - tickSpacing / 2f) {
             if (tx > sliderRect.left + tickSpacing / 2f) {
-                canvas.drawLine(tx, sliderRect.centerY() - px(6f),
-                    tx, sliderRect.centerY() + px(6f), tickPaint)
+                canvas.drawLine(tx, sliderRect.centerY() - g.sliderH * 0.19f,
+                    tx, sliderRect.centerY() + g.sliderH * 0.19f, tickPaint)
             }
             tx += tickSpacing
         }
