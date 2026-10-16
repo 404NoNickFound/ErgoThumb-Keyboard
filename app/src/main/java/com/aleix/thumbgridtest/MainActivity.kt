@@ -1895,7 +1895,11 @@ class DualGridView(context: Context) : View(context) {
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val mode = MeasureSpec.getMode(heightMeasureSpec)
         val size = MeasureSpec.getSize(heightMeasureSpec)
-        val desired = (resources.displayMetrics.heightPixels * heightFraction).toInt()
+        val dm = resources.displayMetrics
+        val land = dm.widthPixels > dm.heightPixels
+        val frac = if (land) maxOf(heightFraction, 0.55f) else heightFraction
+        val desired = (dm.heightPixels * frac).toInt()
+
         val h = when (mode) {
             MeasureSpec.EXACTLY -> size
             MeasureSpec.AT_MOST -> minOf(desired, size)
@@ -2149,30 +2153,56 @@ class DualGridView(context: Context) : View(context) {
         val contentLeft: Float, val contentWidth: Float,
         val capsuleTop: Float, val capsuleH: Float,
         val pillRect: RectF, val conventional: Boolean,
-        val sugH: Float, val suggestRect: RectF
+        val sugH: Float, val suggestRect: RectF,
+    val land: Boolean,
+    val spaceW: Float
     )
 
     private fun geo(): Geo {
-        val padH = px(8f); val padV = px(8f); val gapU = px(8f)
-        val stripH = px(48f)
-        val sliderZone = px(64f)
-        val sliderH = px(32f)
-        val sugH = px(36f)
+        val land = resources.configuration.orientation ==
+            android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        val compact = height < px(200f) || land
+        val padH = if (compact) px(5f) else px(8f)
+        val padV = if (compact) px(5f) else px(8f)
+        val gapU = if (compact) px(5f) else px(8f)
+        val stripH = if (compact) height * 0.14f else px(48f)
+        val sliderZone = if (compact) height * 0.17f else px(64f)
+        val sliderH = if (compact) sliderZone * 0.5f else px(32f)
+        val sugH = if (compact) stripH * 0.78f else px(36f)
         val bottomExtra = height * (marginBottomPct / 100f)
         val zoneTop = height - bottomExtra - sliderZone
         val topH = sugH + (stripH - sugH) * barP
         val gridTop = topH
-        val contentLeft = width * (marginLeftPct / 100f)
-        val contentWidth = width - contentLeft - width * (marginRightPct / 100f)
+        val dm = resources.displayMetrics
+        val shortSide = minOf(dm.widthPixels, dm.heightPixels)
+        val leftMarginPx = if (land) shortSide * (marginLeftPct / 100f)
+            else width * (marginLeftPct / 100f)
+        val rightMarginPx = if (land) shortSide * (marginRightPct / 100f)
+            else width * (marginRightPct / 100f)
+        val contentLeft = leftMarginPx
+        val contentWidth = width - leftMarginPx - rightMarginPx
         val avail = contentWidth - 2 * padH
-        val conventional = gapFraction <= 0.001f
-        val pillW = if (conventional) 0f else maxOf(px(24f), contentWidth * gapFraction)
-        val colW = if (conventional) (avail - 5 * gapU) / 6f
-        else (avail - pillW - 6 * gapU) / 6f
+        val conventional = gapFraction <= 0.001f && !land
+        val portraitContent = shortSide - shortSide * (marginLeftPct / 100f) -
+            shortSide * (marginRightPct / 100f)
+        val portraitAvail = portraitContent - 2 * padH
+        val portraitPillW = maxOf(px(24f), portraitContent * gapFraction)
+        val portraitColW = (portraitAvail - portraitPillW - 6 * gapU) / 6f
+        val pillW = when {
+            conventional -> 0f
+            land -> maxOf(px(24f), avail - 6 * portraitColW - 6 * gapU)
+            else -> maxOf(px(24f), contentWidth * gapFraction)
+        }
+        val colW = when {
+            conventional -> (avail - 5 * gapU) / 6f
+            land -> portraitColW
+            else -> (avail - pillW - 6 * gapU) / 6f
+        }
+
         val leftOrigin = contentLeft + padH
         val rightOrigin = if (conventional) leftOrigin + 3 * colW + 3 * gapU
         else leftOrigin + 3 * colW + pillW + 4 * gapU
-        val spaceBarH = px(spaceBarHU)
+        val spaceBarH = if (land) (zoneTop - gridTop) * 0.20f else px(spaceBarHU)
         val rowH = if (conventional) (zoneTop - gridTop - 2 * padV - 3 * gapU - spaceBarH) / 3f
         else (zoneTop - gridTop - 2 * padV - 2 * gapU) / 3f
         val pillRect = if (conventional) {
@@ -2186,9 +2216,10 @@ class DualGridView(context: Context) : View(context) {
         val capsuleH = (sliderZone - sliderH) / 2f
         val capsuleTop = zoneTop
         val suggestRect = RectF(contentLeft, 0f, contentLeft + contentWidth, topH)
+        val spaceW = if (land) portraitPillW else pillW
         return Geo(stripH, sliderZone, sliderTop, sliderH, gridTop, rowH, colW, gapU,
             padH, padV, leftOrigin, rightOrigin, contentLeft, contentWidth,
-            capsuleTop, capsuleH, pillRect, conventional, sugH, suggestRect)
+            capsuleTop, capsuleH, pillRect, conventional, sugH, suggestRect, land, spaceW)
     }
 
     private fun cellRect(g: Geo, side: GridSide, row: Int, col: Int): RectF {
@@ -2456,7 +2487,9 @@ class DualGridView(context: Context) : View(context) {
         press: PressAnim?, now: Long, flashed: Boolean = false
     ) {
         hintKeyPaint.color = if (flashed) glyphColor() else theme.hint
-        val baseSize = px(13f)
+        val landNow = resources.configuration.orientation ==
+                android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        val baseSize = if (landNow) r.height() * 0.19f else px(13f)
         val yCbase = baseSize * 0.35f
         for ((dir, raw) in key.swipes) {
             val ch = if (capsVisual) raw.uppercase() else raw
@@ -2910,7 +2943,7 @@ class DualGridView(context: Context) : View(context) {
 
                     canvas.save()
                     canvas.clipRect(r)
-                    letterPaint.textSize = px(28f)
+                    letterPaint.textSize = if (g.land) g.rowH * 0.34f else px(28f)
                     letterPaint.color = theme.text
                     val yC = -(letterPaint.descent() + letterPaint.ascent()) / 2f
                     val midY = r.centerY() + yC
@@ -3003,7 +3036,7 @@ class DualGridView(context: Context) : View(context) {
                 val fbT = if (fb != null) t01(fb.start, fbDur(), now) else 1f
                 val label = if (fb != null && fbT < 0.75f) fb.char
                 else if (capsVisual) key.tap.uppercase() else key.tap
-                letterPaint.textSize = px(28f)
+                letterPaint.textSize = if (g.land) g.rowH * 0.34f else px(28f)
                 val yC = -(letterPaint.descent() + letterPaint.ascent()) / 2f
                 val centerScale = if (p.sel != SwipeDir.TAP) 0.9f else 1f
                 letterPaint.typeface =
@@ -3039,33 +3072,44 @@ class DualGridView(context: Context) : View(context) {
             else -> 0f
         }
         if (pillFlash > 0f) pillColor = blendColor(pillColor, theme.flashPole, pillFlash)
-        if (theme.keycapShadow) drawSoftShadow(canvas, pillRect, pillRect.height() / 2f)
-        keycapPaint.color = pillColor
-        canvas.drawRoundRect(pillRect, pillRect.height() / 2f, pillRect.height() / 2f, keycapPaint)
-
-        if (shiftMode == ShiftMode.CAPS) {
-            drawIcon(canvas, Icon.CAPS, pillRect.centerX(), pillRect.centerY(), px(24f))
-        } else if (pillFb != null && pillFbT < 0.75f) {
-            hintPaint.color = theme.text
-            hintPaint.textSize = px(18f)
-            hintPaint.typeface = fontSemiBold
-            val pillYC = -(hintPaint.descent() + hintPaint.ascent()) / 2f
-            canvas.drawText(pillFb.char, pillRect.centerX(), pillRect.centerY() + pillYC, hintPaint)
-        } else if (pillFb != null) {
-            val u = (pillFbT - 0.75f) / 0.25f
-            hintPaint.color = theme.text
-            hintPaint.textSize = px(18f)
-            hintPaint.typeface = fontSemiBold
-            hintPaint.alpha = (255 * (1f - u)).toInt()
-            val pillYC = -(hintPaint.descent() + hintPaint.ascent()) / 2f
-            canvas.drawText(pillFb.char, pillRect.centerX(), pillRect.centerY() + pillYC, hintPaint)
-            hintPaint.alpha = 255
-        } else {
-            hintPaint.color = theme.hint
-            hintPaint.textSize = px(18f)
-            hintPaint.typeface = fontRegular
-            val pillYC = -(hintPaint.descent() + hintPaint.ascent()) / 2f
-            canvas.drawText("␣", pillRect.centerX(), pillRect.centerY() + pillYC, hintPaint)
+        val pieces = if (g.land && !g.conventional &&
+            pillRect.width() > 2 * g.spaceW + px(24f)) {
+            val holeW = pillRect.width() - 2 * g.spaceW
+            listOf(
+                RectF(pillRect.left, pillRect.top,
+                    pillRect.centerX() - holeW / 2f, pillRect.bottom),
+                RectF(pillRect.centerX() + holeW / 2f, pillRect.top,
+                    pillRect.right, pillRect.bottom)
+            )
+        } else listOf(pillRect)
+        for (pc in pieces) {
+            if (theme.keycapShadow) drawSoftShadow(canvas, pc, pc.height() / 2f)
+            keycapPaint.color = pillColor
+            canvas.drawRoundRect(pc, pc.height() / 2f, pc.height() / 2f, keycapPaint)
+            if (shiftMode == ShiftMode.CAPS) {
+                drawIcon(canvas, Icon.CAPS, pc.centerX(), pc.centerY(), px(24f))
+            } else if (pillFb != null && pillFbT < 0.75f) {
+                hintPaint.color = theme.text
+                hintPaint.textSize = px(18f)
+                hintPaint.typeface = fontSemiBold
+                val pillYC = -(hintPaint.descent() + hintPaint.ascent()) / 2f
+                canvas.drawText(pillFb.char, pc.centerX(), pc.centerY() + pillYC, hintPaint)
+            } else if (pillFb != null) {
+                val u = (pillFbT - 0.75f) / 0.25f
+                hintPaint.color = theme.text
+                hintPaint.textSize = px(18f)
+                hintPaint.typeface = fontSemiBold
+                hintPaint.alpha = (255 * (1f - u)).toInt()
+                val pillYC = -(hintPaint.descent() + hintPaint.ascent()) / 2f
+                canvas.drawText(pillFb.char, pc.centerX(), pc.centerY() + pillYC, hintPaint)
+                hintPaint.alpha = 255
+            } else {
+                hintPaint.color = theme.hint
+                hintPaint.textSize = px(18f)
+                hintPaint.typeface = fontRegular
+                val pillYC = -(hintPaint.descent() + hintPaint.ascent()) / 2f
+                canvas.drawText("␣", pc.centerX(), pc.centerY() + pillYC, hintPaint)
+            }
         }
 
         for (s in slides.toList()) {
