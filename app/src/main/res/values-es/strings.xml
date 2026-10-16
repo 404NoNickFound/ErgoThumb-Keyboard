@@ -80,7 +80,7 @@
         <item>Aquí encuentras el tutorial de nuevo y el enlace a GitHub para reportar bugs.</item>
     </string-array>
     <string name="gate_title">Activa el teclado primero</string>
-    <string name="gate_desc">El tutorial (y el teclado) necesitan que actives ThumbGridTest en los ajustes de teclados del sistema. Hazlo y vuelve aquí para continuar; el tutorial se desbloqueará solo.</string>
+    <string name="gate_desc">El tutorial (y el teclado) necesitan que actives ErgoThumb en los ajustes de teclados del sistema. Hazlo y vuelve aquí para continuar; el tutorial se desbloqueará solo.</string>
     <string name="subtype_ca">Català</string>
     <string name="subtype_es">Castellano</string>
     <string name="subtype_en">English</string>

@@ -80,7 +80,7 @@
         <item>Here you find the tutorial again and the GitHub link to report bugs.</item>
     </string-array>
     <string name="gate_title">Enable the keyboard first</string>
-    <string name="gate_desc">The tutorial (and the keyboard) need you to enable ThumbGridTest in the system keyboard settings. Do it and come back here to continue; the tutorial will unlock itself.</string>
+    <string name="gate_desc">The tutorial (and the keyboard) need you to enable ErgoThumb in the system keyboard settings. Do it and come back here to continue; the tutorial will unlock itself.</string>
     <string name="subtype_ca">Català</string>
     <string name="subtype_es">Castellano</string>
     <string name="subtype_en">English</string>

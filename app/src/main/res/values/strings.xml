@@ -80,7 +80,7 @@
         <item>Aquí trobes el tutorial de nou i l\'enllaç a GitHub per reportar bugs.</item>
     </string-array>
     <string name="gate_title">Activa el teclat primer</string>
-    <string name="gate_desc">El tutorial (i el teclat) necessiten que activis ThumbGridTest als ajustos de teclats del sistema. Fes-ho i torna aquí per continuar; el tutorial es desbloquejarà sol.</string>
+    <string name="gate_desc">El tutorial (i el teclat) necessiten que activis ErgoThumb als ajustos de teclats del sistema. Fes-ho i torna aquí per continuar; el tutorial es desbloquejarà sol.</string>
     <string name="subtype_ca">Català</string>
     <string name="subtype_es">Castellano</string>
     <string name="subtype_en">English</string>
