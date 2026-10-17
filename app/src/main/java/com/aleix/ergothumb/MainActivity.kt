@@ -81,7 +81,7 @@ object Prefs {
     const val KEY_VMAX = "vmax_cps"
     const val KEY_CASE_MS = "case_ms"
 
-    // --- Corrector (C1) ---
+    // - Spelling corrector (C1) -
     const val KEY_CORRECTOR = "corrector_enabled"
     const val KEY_CORRECTOR_WARNED = "corrector_warned"
     const val KEY_AUTOCORRECT_SPACE = "autocorrect_space"
@@ -153,7 +153,7 @@ object Prefs {
     fun vmax(ctx: Context) = prefs(ctx).getFloat(KEY_VMAX, DEFAULT_VMAX)
     fun caseMs(ctx: Context) = prefs(ctx).getFloat(KEY_CASE_MS, DEFAULT_CASE_MS)
 
-    // --- Corrector (C1) ---
+    // - Spelling corrector (C1) -
     fun corrector(ctx: Context) = prefs(ctx).getBoolean(KEY_CORRECTOR, false)
     fun correctorWarned(ctx: Context) = prefs(ctx).getBoolean(KEY_CORRECTOR_WARNED, false)
     fun autocorrectSpace(ctx: Context) = prefs(ctx).getBoolean(KEY_AUTOCORRECT_SPACE, true)
@@ -896,7 +896,7 @@ class SettingsActivity : AppCompatActivity() {
             setPadding(0, 8, 0, 0)
         })
 
-        // --- Corrector (C1): al final per no desindexar el tour/focus ---
+        // - Spelling corrector (C1): placed last so it doesn't re-index the tour/focus -
         section(R.string.section_corrector)
         corrSw = mSwitch(R.string.switch_corrector, Prefs.corrector(this)) { v ->
             if (v) {
@@ -1468,10 +1468,10 @@ class ThumbImeService : InputMethodService() {
 
     private var gridView: DualGridView? = null
 
-    // Nota: a MIUI, Settings.Secure.selected_input_method_subtype no es pot canviar
-    // des d'un IME de tercers (el seu servei aplica criteri per locale del sistema).
-    // Aquesta crida és correcta i funciona a AOSP i altres capes; al MIUI només
-    // afecta el comportament intern, no l'etiqueta del selector.
+    // Note: on MIUI, Settings.Secure.selected_input_method_subtype cannot be changed
+    // from a third-party IME (its service applies criteria based on the system locale).
+    // This call is correct and works on AOSP and other OEM layers; on MIUI it only
+    // affects internal behavior, not the selector label.
     @SuppressLint("MissingPermission")
     private fun publishSubtype() {
         try {
@@ -1715,7 +1715,7 @@ class DualGridView(context: Context) : View(context) {
 
     private var erasePauseUntil = 0L
 
-    // --- Corrector (C1) ---
+    // - Spelling corrector (C1) -
     private var suggestions: List<String> = emptyList()
     private var pendingUndoLen = 0
     private var lastAutocorrect: Pair<String, String>? = null
@@ -1846,7 +1846,7 @@ class DualGridView(context: Context) : View(context) {
         lang = Prefs.lang(context)
         layout = Layouts.forLang(lang)
         theme = Themes.current(context)
-        // --- Corrector (C1) ---
+        // - Spelling corrector (C1) -
         correctorOn = Prefs.corrector(context)
         autocorrectSpace = Prefs.autocorrectSpace(context)
         confidenceMin = Prefs.confidence(context)
@@ -1962,7 +1962,7 @@ class DualGridView(context: Context) : View(context) {
 
     private fun erasePaused() = SystemClock.uptimeMillis() < erasePauseUntil
 
-    // --- Corrector (C1): token actual, suggeriments, autocorrecció i esborrat per paraula ---
+    // - Spelling corrector (C1): current token, suggestions, autocorrect and per-word deletion -
     private fun currentToken(): String {
         val before = textTarget?.peekBefore(64) ?: return ""
         val delims = " \n\t.,;:!?()\"«»"
@@ -2527,7 +2527,7 @@ class DualGridView(context: Context) : View(context) {
         else 1f - cubicOut(t01(p.release, dur(100), now))
     }
 
-    // --- Ancoratges normalitzats (0..1) per al DemoOverlay del tutorial ---
+    // - Normalized anchors (0..1) for the tutorial DemoOverlay -
     fun demoCell(side: Int, row: Int, col: Int): RectF? {
         if (width == 0 || height == 0) return null
         val g = geo()
