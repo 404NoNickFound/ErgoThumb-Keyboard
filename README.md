@@ -72,7 +72,7 @@ importable JSON variants. See
 - Outfit typeface: SIL Open Font License 1.1
 - Word frequency lists: derived from the FrequencyWords project
 
-© 2025 404NoNickFound
+© 2026 404NoNickFound
 
 ## Known quirks
 
