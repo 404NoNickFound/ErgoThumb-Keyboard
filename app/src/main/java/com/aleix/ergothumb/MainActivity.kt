@@ -1549,6 +1549,16 @@ class ThumbImeService : InputMethodService() {
         return view
     }
 
+    override fun onFinishInputView(finishingInput: Boolean) {
+        gridView?.flushPendingBigrams()
+        super.onFinishInputView(finishingInput)
+    }
+
+    override fun onDestroy() {
+        gridView?.flushPendingBigrams()
+        super.onDestroy()
+    }
+
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
         gridView?.resetOverlays()
@@ -1691,6 +1701,9 @@ class DualGridView(context: Context) : View(context) {
     private val activePointers = mutableMapOf<Int, PointerState>()
     private val undoStack = ArrayDeque<String>()
     private val handler = Handler(Looper.getMainLooper())
+    private val bigramBuffers = LinkedHashMap<String, StringBuilder>()
+    private var bigramFlushScheduled = false
+    private val bigramFlushRunnable = Runnable { flushPendingBigrams() }
 
     private val presses = mutableMapOf<Int, PressAnim>()
     private val fadingPresses = mutableListOf<PressAnim>()
@@ -1748,6 +1761,7 @@ class DualGridView(context: Context) : View(context) {
     private var clipHistOn = Prefs.clipHistOn(context)
     private var clipMenuOpen = false
     private var clipMenuJustOpened = false
+    private var cachedClipMenuRows: List<String>? = null
     private var sugPressPointer = -1
     private var sugOpenRunnable: Runnable? = null
     private val LONG_PRESS_MS = 1000L
@@ -1769,6 +1783,7 @@ class DualGridView(context: Context) : View(context) {
             if (txt.isNotBlank()) {
                 Prefs.pruneClipHistory(context)
                 Prefs.addClipEntry(context, txt)
+                cachedClipMenuRows = null
                 refreshSuggestions()
                 invalidate()
             }
@@ -2059,13 +2074,14 @@ class DualGridView(context: Context) : View(context) {
         if (Prefs.clipHistory(context).firstOrNull()?.second == txt) return
         Prefs.pruneClipHistory(context)
         Prefs.addClipEntry(context, txt)
+        cachedClipMenuRows = null
         refreshSuggestions()
         invalidate()
     }
 
     private fun tryOpenClipMenu(justOpened: Boolean) {
         if (sensitiveField) return
-        Prefs.pruneClipHistory(context)
+        cachedClipMenuRows = null
         if (clipMenuRows().isEmpty()) return
         clipMenuOpen = true
         if (justOpened) clipMenuJustOpened = true
@@ -2081,8 +2097,10 @@ class DualGridView(context: Context) : View(context) {
     }
 
     private fun clipMenuRows(): List<String> {
+        cachedClipMenuRows?.let { return it }
         Prefs.pruneClipHistory(context)
         return Prefs.clipHistory(context).map { it.second }.take(6)
+            .also { cachedClipMenuRows = it }
     }
 
     private fun applySuggestion(word: String) {
@@ -2296,10 +2314,34 @@ class DualGridView(context: Context) : View(context) {
     }
 
     private fun logBigram(prev: String, cur: String) {
-        try {
-            java.io.File(context.filesDir, "bigrams_$lang.txt")
-                .appendText("$prev$cur\n")
-        } catch (_: Exception) {
+        var buffer = bigramBuffers[lang]
+        if (buffer == null) {
+            buffer = StringBuilder()
+            bigramBuffers[lang] = buffer
+        }
+        buffer.append(prev).append(cur).append('\n')
+        if (!bigramFlushScheduled) {
+            bigramFlushScheduled = true
+            handler.postDelayed(bigramFlushRunnable, 5_000L)
+        }
+    }
+
+    fun flushPendingBigrams() {
+        handler.removeCallbacks(bigramFlushRunnable)
+        bigramFlushScheduled = false
+        val iterator = bigramBuffers.entries.iterator()
+        while (iterator.hasNext()) {
+            val (language, buffer) = iterator.next()
+            try {
+                java.io.File(context.filesDir, "bigrams_$language.txt")
+                    .appendText(buffer.toString())
+                iterator.remove()
+            } catch (_: Exception) {
+            }
+        }
+        if (bigramBuffers.isNotEmpty() && !bigramFlushScheduled) {
+            bigramFlushScheduled = true
+            handler.postDelayed(bigramFlushRunnable, 5_000L)
         }
     }
 
@@ -3295,6 +3337,7 @@ class DualGridView(context: Context) : View(context) {
                             val word = rows[idx]
                             if (x > r.right - px(48f)) {
                                 Prefs.removeClipEntry(context, word)
+                                cachedClipMenuRows = null
                                 tutEvent?.invoke("clipTrash")
                                 refreshSuggestions()
                                 if (clipMenuRows().isEmpty()) clipMenuOpen = false
