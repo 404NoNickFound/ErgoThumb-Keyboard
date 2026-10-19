@@ -1607,6 +1607,19 @@ class ThumbImeService : InputMethodService() {
 
 class DualGridView(context: Context) : View(context) {
 
+    private val drawCellRects = Array(18) { RectF() }
+    private val drawRectA = RectF()
+    private val drawRectB = RectF()
+    private val drawRectC = RectF()
+    private val drawRectD = RectF()
+    private val drawClipMenuRect = RectF()
+    private val geoPillRect = RectF()
+    private val geoSuggestRect = RectF()
+    private val drawPath = Path()
+    private val drawPresses = ArrayList<PressAnim>()
+    private val drawAlphas = intArrayOf(0x14, 0x0F, 0x0A)
+    private val drawSides = arrayOf(GridSide.LEFT, GridSide.RIGHT)
+
     var textTarget: TextTarget? = null
     var sensitiveField = false
     var noLearnField = false
@@ -2062,8 +2075,9 @@ class DualGridView(context: Context) : View(context) {
 
     private fun clipMenuRect(): RectF {
         val g = geo()
-        return RectF(g.contentLeft + px(8f), g.sugH + px(8f),
+        drawClipMenuRect.set(g.contentLeft + px(8f), g.sugH + px(8f),
             g.contentLeft + g.contentWidth - px(8f), g.capsuleTop - px(8f))
+        return drawClipMenuRect
     }
 
     private fun clipMenuRows(): List<String> {
@@ -2205,17 +2219,19 @@ class DualGridView(context: Context) : View(context) {
         val spaceBarH = if (land) (zoneTop - gridTop) * 0.20f else px(spaceBarHU)
         val rowH = if (conventional) (zoneTop - gridTop - 2 * padV - 3 * gapU - spaceBarH) / 3f
         else (zoneTop - gridTop - 2 * padV - 2 * gapU) / 3f
-        val pillRect = if (conventional) {
+        if (conventional) {
             val top = gridTop + padV + 3 * rowH + 3 * gapU
-            RectF(leftOrigin, top, leftOrigin + 6 * colW + 5 * gapU, top + spaceBarH)
+            geoPillRect.set(leftOrigin, top, leftOrigin + 6 * colW + 5 * gapU, top + spaceBarH)
         } else {
             val gl = leftOrigin + 3 * colW + 3 * gapU
-            RectF(gl, gridTop + padV, gl + pillW, gridTop + padV + 3 * rowH + 2 * gapU)
+            geoPillRect.set(gl, gridTop + padV, gl + pillW, gridTop + padV + 3 * rowH + 2 * gapU)
         }
+        val pillRect = geoPillRect
         val sliderTop = zoneTop + (sliderZone - sliderH) / 2f
         val capsuleH = (sliderZone - sliderH) / 2f
         val capsuleTop = zoneTop
-        val suggestRect = RectF(contentLeft, 0f, contentLeft + contentWidth, topH)
+        geoSuggestRect.set(contentLeft, 0f, contentLeft + contentWidth, topH)
+        val suggestRect = geoSuggestRect
         val spaceW = if (land) portraitPillW else pillW
         return Geo(stripH, sliderZone, sliderTop, sliderH, gridTop, rowH, colW, gapU,
             padH, padV, leftOrigin, rightOrigin, contentLeft, contentWidth,
@@ -2227,6 +2243,16 @@ class DualGridView(context: Context) : View(context) {
         val x = originX + col * (g.colW + g.gapU)
         val y = g.gridTop + g.padV + row * (g.rowH + g.gapU)
         return RectF(x, y, x + g.colW, y + g.rowH)
+    }
+
+    private fun cellRectForDraw(g: Geo, side: GridSide, row: Int, col: Int): RectF {
+        val index = (if (side == GridSide.LEFT) 0 else 9) + row * 3 + col
+        val rect = drawCellRects[index]
+        val originX = if (side == GridSide.LEFT) g.leftOrigin else g.rightOrigin
+        val x = originX + col * (g.colW + g.gapU)
+        val y = g.gridTop + g.padV + row * (g.rowH + g.gapU)
+        rect.set(x, y, x + g.colW, y + g.rowH)
+        return rect
     }
 
     private fun capsuleWidth(): Float =
@@ -2397,7 +2423,8 @@ class DualGridView(context: Context) : View(context) {
         iconPaint.alpha = alpha
         iconPaint.strokeWidth = s * 0.10f
         val h = s / 2f
-        val path = Path()
+        val path = drawPath
+        path.rewind()
         when (ic) {
             Icon.SHIFT, Icon.CAPS -> {
                 val lift = if (ic == Icon.CAPS) -h * 0.35f else 0f
@@ -2467,12 +2494,11 @@ class DualGridView(context: Context) : View(context) {
     private val langPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
 
     private fun drawSoftShadow(canvas: Canvas, r: RectF, radius: Float) {
-        val alphas = intArrayOf(0x14, 0x0F, 0x0A)
-        for (i in alphas.indices) {
+        for (i in drawAlphas.indices) {
             val dy = px(2f) * (i + 1)
             val grow = px(1f) * i
             shadowPaint.color = theme.shadowColor
-            shadowPaint.alpha = alphas[i]
+            shadowPaint.alpha = drawAlphas[i]
             canvas.drawRoundRect(
                 r.left - grow, r.top - grow + dy,
                 r.right + grow, r.bottom + grow + dy,
@@ -2706,7 +2732,7 @@ class DualGridView(context: Context) : View(context) {
 
 
     private fun drawSymbolLayer(canvas: Canvas, g: Geo) {
-        val area = RectF(g.contentLeft, g.gridTop, g.contentLeft + g.contentWidth, g.capsuleTop)
+        val area = drawRectA.apply { set(g.contentLeft, g.gridTop, g.contentLeft + g.contentWidth, g.capsuleTop) }
         keycapPaint.color = theme.role[Themes.BG]
         canvas.drawRect(area, keycapPaint)
         val gapU = g.gapU
@@ -2722,7 +2748,7 @@ class DualGridView(context: Context) : View(context) {
                 val x = area.left + gapU + c * (colW + gapU)
                 val y = area.top + gapU + r * (rowH + gapU)
                 val w = colW * span + gapU * (span - 1)
-                val rect = RectF(x, y, x + w, y + rowH)
+                val rect = drawRectB.apply { set(x, y, x + w, y + rowH) }
                 keycapPaint.color = theme.role[Themes.KEYCAP]
                 canvas.drawRoundRect(rect, radius, radius, keycapPaint)
                 when (sym) {
@@ -2833,10 +2859,9 @@ class DualGridView(context: Context) : View(context) {
                 val cx = topRect.left + third * i + third / 2f
                 if (i == 1) {
                     keycapPaint.color = blendColor(theme.role[Themes.STRIP], theme.flashPole, 0.15f)
-                    canvas.drawRoundRect(
-                        RectF(topRect.left + third + px(4f), topRect.top + px(4f),
-                            topRect.left + 2 * third - px(4f), topRect.bottom - px(4f)),
-                        px(10f), px(10f), keycapPaint)
+                    drawRectA.set(topRect.left + third + px(4f), topRect.top + px(4f),
+                        topRect.left + 2 * third - px(4f), topRect.bottom - px(4f))
+                    canvas.drawRoundRect(drawRectA, px(10f), px(10f), keycapPaint)
                     textPaint.textSize = g.stripH * 0.33f
                     textPaint.typeface = fontSemiBold
                     textPaint.color = theme.text
@@ -2859,7 +2884,7 @@ class DualGridView(context: Context) : View(context) {
             val knobX = (trackC + sugManageDx).coerceIn(trackC - half, trackC + half)
             keycapPaint.color = blendColor(theme.role[Themes.STRIP], theme.flashPole, 0.25f)
             canvas.drawRoundRect(topRect, px(12f), px(12f), keycapPaint)
-            val trackRect = RectF(trackL, cy - trackH / 2f, trackR, cy + trackH / 2f)
+            val trackRect = drawRectA.apply { set(trackL, cy - trackH / 2f, trackR, cy + trackH / 2f) }
             keycapPaint.color = theme.role[Themes.SLIDER]
             canvas.drawRoundRect(trackRect, trackH / 2f, trackH / 2f, keycapPaint)
             tickPaint.color = theme.hint
@@ -2884,7 +2909,7 @@ class DualGridView(context: Context) : View(context) {
             val knobCol = if (t <= 0.02f) theme.role[Themes.KNOB]
             else blendColor(theme.role[Themes.KNOB], targetCol, t)
             val kd2 = trackH * 1.3f
-            val knobRect = RectF(knobX - kd2 / 2f, cy - kd2 / 2f, knobX + kd2 / 2f, cy + kd2 / 2f)
+            val knobRect = drawRectB.apply { set(knobX - kd2 / 2f, cy - kd2 / 2f, knobX + kd2 / 2f, cy + kd2 / 2f) }
             drawSoftShadow(canvas, knobRect, kd2 / 2f)
             keycapPaint.color = knobCol
             canvas.drawRoundRect(knobRect, kd2 / 2f, kd2 / 2f, keycapPaint)
@@ -2897,11 +2922,10 @@ class DualGridView(context: Context) : View(context) {
         fun dimFor(r: RectF): Float {
             if (!animDepth) return 0f
             var d = 0f
-            val all = presses.values.toList() + fadingPresses
-            for (p in all) {
+            for (p in drawPresses) {
                 val pr = pressProgress(p, now)
                 if (pr <= 0f) continue
-                val pc = cellRect(g, p.side, p.row, p.col)
+                val pc = drawRectA.apply { set(cellRectForDraw(g, p.side, p.row, p.col)) }
                 val dist = hypot(pc.centerX() - r.centerX(), pc.centerY() - r.centerY())
                 val fall = (1f - dist / (3.5f * g.colW)).coerceIn(0f, 1f)
                 d = maxOf(d, pr * fall)
@@ -2910,10 +2934,15 @@ class DualGridView(context: Context) : View(context) {
         }
 
         val radius = px(16f)
-        for (side in listOf(GridSide.LEFT, GridSide.RIGHT)) {
+        drawPresses.clear()
+        if (animDepth) {
+            drawPresses.addAll(presses.values)
+            drawPresses.addAll(fadingPresses)
+        }
+        for (side in drawSides) {
             for (row in 0..2) {
                 for (col in 0..2) {
-                    val r = cellRect(g, side, row, col)
+                    val r = cellRectForDraw(g, side, row, col)
                     val press = presses.values.firstOrNull {
                         it.side == side && it.row == row && it.col == col
                     }
@@ -3009,17 +3038,19 @@ class DualGridView(context: Context) : View(context) {
         }
 
         if (animDepth) {
-            val all = presses.values.toList() + fadingPresses
-            for (p in all) {
+            drawPresses.clear()
+            drawPresses.addAll(presses.values)
+            drawPresses.addAll(fadingPresses)
+            for (p in drawPresses) {
                 val pr = pressProgress(p, now)
                 if (pr <= 0f) continue
-                val r = cellRect(g, p.side, p.row, p.col)
+                val r = cellRectForDraw(g, p.side, p.row, p.col)
                 val sc = 1f + 0.35f * pr
                 val cx = r.centerX(); val cy = r.centerY()
-                val lr = RectF(
+                val lr = drawRectD.apply { set(
                     cx - r.width() * sc / 2f, cy - r.height() * sc / 2f,
                     cx + r.width() * sc / 2f, cy + r.height() * sc / 2f
-                )
+                ) }
                 val liftFlash = if (!animHelp) 0f else when {
                     p.release < 0 -> 0.45f
                     else -> 0.45f * (1f - t01(p.release, fbDur(), now))
@@ -3072,17 +3103,18 @@ class DualGridView(context: Context) : View(context) {
             else -> 0f
         }
         if (pillFlash > 0f) pillColor = blendColor(pillColor, theme.flashPole, pillFlash)
-        val pieces = if (g.land && !g.conventional &&
-            pillRect.width() > 2 * g.spaceW + px(24f)) {
-            val holeW = pillRect.width() - 2 * g.spaceW
-            listOf(
-                RectF(pillRect.left, pillRect.top,
-                    pillRect.centerX() - holeW / 2f, pillRect.bottom),
-                RectF(pillRect.centerX() + holeW / 2f, pillRect.top,
-                    pillRect.right, pillRect.bottom)
-            )
-        } else listOf(pillRect)
-        for (pc in pieces) {
+        val splitPill = g.land && !g.conventional &&
+            pillRect.width() > 2 * g.spaceW + px(24f)
+        val holeW = if (splitPill) pillRect.width() - 2 * g.spaceW else 0f
+        val pieceCount = if (splitPill) 2 else 1
+        for (pieceIndex in 0 until pieceCount) {
+            val pc = when {
+                !splitPill -> pillRect
+                pieceIndex == 0 -> drawRectA.apply { set(pillRect.left, pillRect.top,
+                    pillRect.centerX() - holeW / 2f, pillRect.bottom) }
+                else -> drawRectB.apply { set(pillRect.centerX() + holeW / 2f,
+                    pillRect.top, pillRect.right, pillRect.bottom) }
+            }
             if (theme.keycapShadow) drawSoftShadow(canvas, pc, pc.height() / 2f)
             keycapPaint.color = pillColor
             canvas.drawRoundRect(pc, pc.height() / 2f, pc.height() / 2f, keycapPaint)
@@ -3112,7 +3144,7 @@ class DualGridView(context: Context) : View(context) {
             }
         }
 
-        for (s in slides.toList()) {
+        for (s in slides) {
             val tr = t01(s.start, slideDur(), now)
             val t = cubicOut(tr)
             val fade = ((tr - 0.55f) / 0.45f).coerceIn(0f, 1f)
@@ -3134,8 +3166,8 @@ class DualGridView(context: Context) : View(context) {
         }
 
         val capW = capsuleWidth()
-        val capRect = RectF(g.contentLeft + px(8f), g.capsuleTop,
-            g.contentLeft + px(8f) + capW, g.capsuleTop + g.capsuleH)
+        val capRect = drawRectA.apply { set(g.contentLeft + px(8f), g.capsuleTop,
+            g.contentLeft + px(8f) + capW, g.capsuleTop + g.capsuleH) }
         keycapPaint.color = theme.role[Themes.SPECIAL]
         canvas.drawRoundRect(capRect, g.capsuleH / 2f, g.capsuleH / 2f, keycapPaint)
         langPaint.color = theme.text
@@ -3156,8 +3188,8 @@ class DualGridView(context: Context) : View(context) {
             canvas.drawText(lang.uppercase(), capRect.centerX(), capRect.centerY() + capYC, langPaint)
         }
 
-        val sliderRect = RectF(g.contentLeft + px(16f), g.sliderTop,
-            g.contentLeft + g.contentWidth - px(16f), g.sliderTop + g.sliderH)
+        val sliderRect = drawRectB.apply { set(g.contentLeft + px(16f), g.sliderTop,
+            g.contentLeft + g.contentWidth - px(16f), g.sliderTop + g.sliderH) }
         keycapPaint.color = theme.role[Themes.SLIDER]
         canvas.drawRoundRect(sliderRect, g.sliderH / 2f, g.sliderH / 2f, keycapPaint)
         tickPaint.color = theme.hint
@@ -3176,8 +3208,8 @@ class DualGridView(context: Context) : View(context) {
 
         val kd = knobD(g)
         val kcx = knobCenterX(g) + knobP * knobTravel(g)
-        val knobRect = RectF(kcx - kd / 2f, sliderRect.centerY() - kd / 2f,
-            kcx + kd / 2f, sliderRect.centerY() + kd / 2f)
+        val knobRect = drawRectC.apply { set(kcx - kd / 2f, sliderRect.centerY() - kd / 2f,
+            kcx + kd / 2f, sliderRect.centerY() + kd / 2f) }
         drawSoftShadow(canvas, knobRect, kd / 2f)
         keycapPaint.color = theme.role[Themes.KNOB]
         canvas.drawRoundRect(knobRect, kd / 2f, kd / 2f, keycapPaint)
