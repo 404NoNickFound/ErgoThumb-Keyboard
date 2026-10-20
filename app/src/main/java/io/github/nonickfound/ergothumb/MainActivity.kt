@@ -1,4 +1,4 @@
-package com.aleix.ergothumb
+package io.github.nonickfound.ergothumb
 
 import android.annotation.SuppressLint
 import android.app.AlertDialog
@@ -1723,6 +1723,7 @@ class DualGridView(context: Context) : View(context) {
     private var lastLetter: String? = null
 
     private var lastCapsVisual = false
+    private var autoCapOff = false
     private var caseInitialized = false
     private var caseAnimStart = -1L
     private var caseFromUpper = false
@@ -2035,6 +2036,7 @@ class DualGridView(context: Context) : View(context) {
         Log.d("ThumbGrid", "sugg tok='$tok' n=${suggestions.count { it.isNotEmpty() }} dict=${SpellEngine.size()}")
     }
     private fun handleBoundary(finished: String) {
+        autoCapOff = false
         if (sensitiveField) return
         val f = finished.lowercase()
         if (f.isNotEmpty()) {
@@ -2306,7 +2308,7 @@ class DualGridView(context: Context) : View(context) {
     }
 
     private fun shouldAutoCap(): Boolean {
-        if (!autoCap) return false
+        if (!autoCap || autoCapOff) return false
         val b = textTarget?.peekBefore(3) ?: return true
         val trimmed = b.trimEnd(' ')
         if (trimmed.isEmpty()) return true
@@ -3817,6 +3819,7 @@ class DualGridView(context: Context) : View(context) {
                 }
                 SwipeDir.S, SwipeDir.SE, SwipeDir.SW -> {
                     textTarget?.enter()
+                    autoCapOff = false
                     undoStack.clear()
                     tutEvent?.invoke("enter")
                     slides.add(GlyphSlide(Icon.ENTER, SwipeDir.S, SystemClock.uptimeMillis()))
@@ -3825,21 +3828,29 @@ class DualGridView(context: Context) : View(context) {
                 else -> {
                     val now = SystemClock.uptimeMillis()
                     val prevMode = shiftMode
+                    val capsNow = prevMode != ShiftMode.OFF || shouldAutoCap()
+                    val isDouble = now - lastUpSwipeTime < doubleWindowMs.toLong()
                     shiftMode = when {
-                        shiftMode == ShiftMode.CAPS -> ShiftMode.OFF
-                        now - lastUpSwipeTime < doubleWindowMs.toLong() -> {
+                        prevMode == ShiftMode.CAPS -> {
+                            autoCapOff = true
+                            ShiftMode.OFF
+                        }
+                        isDouble -> {
                             lastUpSwipeTime = 0L
                             ShiftMode.CAPS
+                        }
+                        capsNow -> {
+                            autoCapOff = true
+                            ShiftMode.OFF
                         }
                         else -> {
                             lastUpSwipeTime = now
                             ShiftMode.ONCE
                         }
                     }
-                    if (shiftMode == ShiftMode.CAPS && prevMode != ShiftMode.CAPS)
-                        tutEvent?.invoke("capsOn")
-                    if (shiftMode == ShiftMode.OFF && prevMode == ShiftMode.CAPS)
-                        tutEvent?.invoke("capsOff")
+                    val capsAfter = shiftMode != ShiftMode.OFF || shouldAutoCap()
+                    if (capsAfter && !capsNow) tutEvent?.invoke("capsOn")
+                    if (!capsAfter && capsNow) tutEvent?.invoke("capsOff")
                     val icon = if (shiftMode == ShiftMode.CAPS && prevMode != ShiftMode.CAPS) {
                         Icon.CAPS
                     } else {
