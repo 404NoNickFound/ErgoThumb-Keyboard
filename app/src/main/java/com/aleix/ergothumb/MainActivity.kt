@@ -2136,7 +2136,7 @@ class DualGridView(context: Context) : View(context) {
         textTarget?.commit(" ")
         tutEvent?.invoke("commit: ")
         undoStack.clear()
-        lastAutocorrect = low to formatted
+        lastAutocorrect = tok to formatted
         pendingUndoLen = 0
         handleBoundary(formatted.lowercase())
         return true
