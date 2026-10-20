@@ -4,3 +4,5 @@ build/
 *.iml
 local.properties
 docs/BOOTSTRAP.md
+keystore.properties
+*.jks
