@@ -63,8 +63,11 @@ Then enable the keyboard as described above.
 Translations live in `app/src/main/res/values*/`; partial translations are
 welcome (the default locale, Catalan, is the fallback for missing strings).
 Community layout presets (regional letter placements) are planned as
-importable JSON variants. See
-[CONTRIBUTING.md](https://github.com/404NoNickFound/ErgoThumb-Keyboard/blob/main/CONTRIBUTING.md).
+importable JSON variants; see the
+[roadmap](https://github.com/404NoNickFound/ErgoThumb-Keyboard/blob/main/docs/ROADMAP.md)
+for the version they land in. See
+[CONTRIBUTING.md](https://github.com/404NoNickFound/ErgoThumb-Keyboard/blob/main/CONTRIBUTING.md)
+for how to propose one.
 
 ## Licenses
 
