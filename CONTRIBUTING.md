@@ -11,8 +11,9 @@ and contributions of any size are welcome.
   reproduce.
 - **Translate** the interface (see below).
 - **Propose layout presets** for your language or region (regional letter
-  placements). Presets are planned as importable JSON variants; until then,
-  open an issue describing the layout you need.
+  placements). Presets are planned as importable JSON variants; see the
+  [roadmap](docs/ROADMAP.md) for the version they land in. Until then, open
+  an issue describing the layout you need.
 - **Contribute code** (see development setup).
 
 ## Translations
