@@ -216,4 +216,7 @@
         <item>Toca la cápsula del idioma (abajo a la izquierda) para cambiar de idioma y vuelve a tocarla hasta regresar al tuyo.</item>
         <item>Cada tarjeta de aquí abajo es un apartado de los ajustes. Cuando el repositorio sea público, el botón te llevará a GitHub para reportar bugs.</item>
     </string-array>
+    <string name="tutorial_corrector_off_msg">Estos pasos necesitan el corrector ortográfico, que viene desactivado por defecto.</string>
+    <string name="tutorial_corrector_enable">Activar el corrector</string>
+    <string name="tutorial_corrector_skip">No, ir al resumen</string>
 </resources>

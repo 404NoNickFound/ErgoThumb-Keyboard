@@ -216,4 +216,7 @@
         <item>Toca la càpsula de l\'idioma (a baix a l\'esquerra) per canviar d\'idioma i torna-hi a tocar fins a retornar al teu.</item>
         <item>Cada targeta d\'aquí sota és un apartat dels ajustos. Quan el repositori sigui públic, el botó et portarà a GitHub per reportar bugs.</item>
     </string-array>
+    <string name="tutorial_corrector_off_msg">Aquests passos necessiten el corrector ortogràfic, que ve desactivat per defecte.</string>
+    <string name="tutorial_corrector_enable">Activa el corrector</string>
+    <string name="tutorial_corrector_skip">No, ves al resum</string>
 </resources>

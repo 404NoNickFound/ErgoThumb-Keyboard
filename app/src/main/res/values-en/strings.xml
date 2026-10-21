@@ -216,4 +216,7 @@
         <item>Tap the language capsule (bottom left) to switch language, then tap again until you\'re back to yours.</item>
         <item>Each card below is one settings section. Once the repository is public, the button will take you to GitHub to report bugs.</item>
     </string-array>
+    <string name="tutorial_corrector_off_msg">These steps need the spell checker, which is off by default.</string>
+    <string name="tutorial_corrector_enable">Enable spell checker</string>
+    <string name="tutorial_corrector_skip">No, go to summary</string>
 </resources>

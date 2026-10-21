@@ -184,6 +184,10 @@ object Prefs {
         val set = demoted(ctx).toMutableSet(); set.add(pair)
         prefs(ctx).edit().putStringSet(KEY_DEMOTED, set).apply()
     }
+    fun setCorrector(ctx: Context, on: Boolean, warned: Boolean = false) {
+        prefs(ctx).edit().putBoolean(KEY_CORRECTOR, on)
+            .putBoolean(KEY_CORRECTOR_WARNED, warned).apply()
+    }
     fun putLearned(ctx: Context, key: String, value: String) {
         val cur = lang(ctx)
         val m = learned(ctx).toMutableMap()

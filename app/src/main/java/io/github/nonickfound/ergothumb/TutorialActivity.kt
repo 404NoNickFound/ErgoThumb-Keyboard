@@ -493,6 +493,26 @@ class TutorialActivity : AppCompatActivity() {
         skipStepBtn.text = getString(R.string.tutorial_skip_step)
         skipStepBtn.setOnClickListener { advanceStep() }
         clearExtraPanels()
+        if (step in 14..16 && !Prefs.corrector(this)) {
+            addExtra(TextView(this).apply {
+                text = getString(R.string.tutorial_corrector_off_msg)
+            })
+            addExtra(MaterialButton(this).apply {
+                text = getString(R.string.tutorial_corrector_enable)
+                setOnClickListener {
+                    Prefs.setCorrector(this@TutorialActivity, true, true)
+                    grid.reloadPrefs()
+                }
+            })
+            addExtra(MaterialButton(this).apply {
+                text = getString(R.string.tutorial_corrector_skip)
+                setOnClickListener {
+                    step = titles.size - 1
+                    phase = 0
+                    showPhase()
+                }
+            })
+        }
 
         val hideGrid = (step == 0 || step == titles.size - 1)
         gridWrap.visibility = if (hideGrid) View.GONE else View.VISIBLE
