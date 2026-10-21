@@ -552,15 +552,6 @@ class TutorialActivity : AppCompatActivity() {
         addExtra(labelView(getString(R.string.color_light_row)))
         addExtra(swatchRow(isDark = false))
 
-        addExtra(miniSlider(R.string.slider_height, 25f, 60f, Prefs.height(this) * 100f) { v ->
-            prefs.edit().putFloat(Prefs.KEY_HEIGHT, v / 100f).apply(); grid.reloadPrefs()
-        })
-        addExtra(miniSlider(R.string.slider_gap, 0f, 15f, Prefs.gap(this) * 100f) { v ->
-            prefs.edit().putFloat(Prefs.KEY_GAP, v / 100f).apply(); grid.reloadPrefs()
-        })
-        addExtra(miniSlider(R.string.slider_margin_bottom, 0f, 25f, Prefs.marginBottom(this)) { v ->
-            prefs.edit().putFloat(Prefs.KEY_MARGIN_BOTTOM, v).apply(); grid.reloadPrefs()
-        })
 
         addExtra(labelView(getString(R.string.keyboard_langs_title)))
         val enabled = Prefs.langs(this).toMutableList()
