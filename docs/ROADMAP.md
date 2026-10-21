@@ -10,13 +10,13 @@ current plan, and so users can tell whether the project is alive: check the
 commit history of this file. An updated roadmap means an active maintainer,
 even between releases.
 
-## 0.1.0 — current release
+## 0.1.0 (current)
 
 First public version. Everything listed in the release notes ships here.
 No new features will be added to 0.1.x; only hotfixes for crashes, data loss,
 or security issues.
 
-## 0.2.0 — polish and comfort
+## 0.2.0
 
 - **Emojis.**
 - **Improved landscape layout.**
@@ -27,7 +27,7 @@ or security issues.
 - **Faster erase** with an extra action (a stronger gesture or a dedicated
   control, to be designed).
 
-## 0.3.0 — customization, portability, one-hand
+## 0.3.0
 
 - **New gestures** — currently: shake to move the keyboard side-to-side, and
   collapse the two 3×3 grids into a single 3×3 + space (one-hand mode: toggle,
@@ -54,7 +54,7 @@ or security issues.
   characters are present in the layout and fill any gaps.
 - **Community website** for languages and presets.
 
-## 0.4.0 — intelligence
+## 0.4.0
 
 - **Presets suggested by bigrams**: derive an optimal layout from the user's
   own typing statistics. Lands in 0.4.0, or splits into 0.5.0 if 0.4.0 grows
