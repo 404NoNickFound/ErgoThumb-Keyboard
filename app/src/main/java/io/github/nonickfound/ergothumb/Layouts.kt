@@ -1,4 +1,4 @@
-package com.aleix.ergothumb
+package io.github.nonickfound.ergothumb
 
 data class KeyDef(
     val tap: String,

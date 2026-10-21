@@ -12,13 +12,13 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace = "com.aleix.ergothumb"
+    namespace = "io.github.nonickfound.ergothumb"
     compileSdk {
         version = release(37)
     }
 
     defaultConfig {
-        applicationId = "com.aleix.ergothumb"
+        applicationId = "io.github.nonickfound.ergothumb"
         minSdk = 26
         targetSdk = 37
         versionCode = 1

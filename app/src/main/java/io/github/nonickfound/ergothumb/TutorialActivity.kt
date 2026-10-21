@@ -1,4 +1,4 @@
-package com.aleix.ergothumb
+package io.github.nonickfound.ergothumb
 
 import android.content.Intent
 import android.graphics.Color

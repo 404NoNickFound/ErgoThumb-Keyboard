@@ -1,4 +1,4 @@
-package com.aleix.ergothumb
+package io.github.nonickfound.ergothumb
 
 import android.content.Context
 import android.os.Handler
