@@ -24,7 +24,7 @@ uninstall the app**. Each item below is stored only if you enable the
 corresponding feature:
 
 - **Letter-pair statistics (bigrams)** — counts of which letters you type
-  after which, used to rank suggestions and (in the future) layout presets.
+  after which, used to rank suggestions.
   Opt-in through an explicit warning dialog; stored as a plain text file.
 - **Next-word prediction pairs** — which words you type after which.
   Opt-in through an explicit warning dialog.
