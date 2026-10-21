@@ -219,4 +219,6 @@
     <string name="tutorial_corrector_off_msg">These steps need the spell checker, which is off by default.</string>
     <string name="tutorial_corrector_enable">Enable spell checker</string>
     <string name="tutorial_corrector_skip">No, go to summary</string>
+    <string name="slider_edge_margin">Edge margin (fast erase/redo)</string>
+    <string name="edge_margin_off">Off</string>
 </resources>

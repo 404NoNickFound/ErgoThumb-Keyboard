@@ -219,4 +219,6 @@
     <string name="tutorial_corrector_off_msg">Estos pasos necesitan el corrector ortográfico, que viene desactivado por defecto.</string>
     <string name="tutorial_corrector_enable">Activar el corrector</string>
     <string name="tutorial_corrector_skip">No, ir al resumen</string>
+    <string name="slider_edge_margin">Margen de borde (borrado/deshacer rápido)</string>
+    <string name="edge_margin_off">Desactivado</string>
 </resources>

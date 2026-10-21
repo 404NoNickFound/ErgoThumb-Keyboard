@@ -104,6 +104,8 @@ object Prefs {
     const val DEFAULT_VMAX = 20f
     const val DEFAULT_CASE_MS = 260f
     const val DEFAULT_SPACEBAR_H = 56f
+    const val KEY_EDGE_MARGIN = "edge_margin"
+    const val DEFAULT_EDGE_MARGIN = 24f
 
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences(NAME, Context.MODE_PRIVATE)
@@ -131,6 +133,7 @@ object Prefs {
     fun onboardShown(ctx: Context) = prefs(ctx).getBoolean(KEY_ONBOARD_SHOWN, false)
     fun setOnboardShown(ctx: Context, v: Boolean) =
         prefs(ctx).edit().putBoolean(KEY_ONBOARD_SHOWN, v).apply()
+    fun edgeMargin(ctx: Context) = prefs(ctx).getFloat(KEY_EDGE_MARGIN, DEFAULT_EDGE_MARGIN)
     fun spaceBarH(ctx: Context) = prefs(ctx).getFloat(KEY_SPACEBAR_H, DEFAULT_SPACEBAR_H)
     fun tutorialDone(ctx: Context) = prefs(ctx).getBoolean(KEY_TUTORIAL_DONE, false)
     fun erasePrecision(ctx: Context) = prefs(ctx).getBoolean(KEY_ERASE_PRECISION, false)
@@ -846,6 +849,10 @@ class SettingsActivity : AppCompatActivity() {
         { v -> putF(Prefs.KEY_SENS_ERASE, v) }
         mSwitch(R.string.switch_erase_precision, Prefs.erasePrecision(this))
         { putB(Prefs.KEY_ERASE_PRECISION, it) }
+        mSlider(R.string.slider_edge_margin, 0f, 60f, Prefs.edgeMargin(this),
+            { if (it.toInt() == 0) getString(R.string.edge_margin_off)
+              else getString(R.string.fmt_dp, it.toInt()) })
+        { v -> putF(Prefs.KEY_EDGE_MARGIN, v) }
         mSlider(R.string.slider_flick, 80f, 400f, Prefs.flickMs(this),
             { getString(R.string.fmt_ms, it.toInt()) })
         { v -> putF(Prefs.KEY_FLICK_MS, v) }
@@ -1765,6 +1772,7 @@ class DualGridView(context: Context) : View(context) {
     private var correctorOn = Prefs.corrector(context)
     private var autocorrectSpace = Prefs.autocorrectSpace(context)
     private val demoted = Prefs.demoted(context).toMutableSet()
+    private var edgeMarginU = Prefs.edgeMargin(context)
     private var confidenceMin = Prefs.confidence(context)
     private var undoWhole = Prefs.undoWhole(context)
     private var blacklist = Prefs.blacklist(context)
@@ -1891,6 +1899,7 @@ class DualGridView(context: Context) : View(context) {
         // - Spelling corrector (C1) -
         correctorOn = Prefs.corrector(context)
         autocorrectSpace = Prefs.autocorrectSpace(context)
+        edgeMarginU = Prefs.edgeMargin(context)
         confidenceMin = Prefs.confidence(context)
         undoWhole = Prefs.undoWhole(context)
         clipHistOn = Prefs.clipHistOn(context)
@@ -3341,7 +3350,7 @@ class DualGridView(context: Context) : View(context) {
         if (width == 0 || height == 0) return true
 
         val g = geo()
-        val edgeZone = 24 * resources.displayMetrics.density
+        val edgeZone = edgeMarginU * resources.displayMetrics.density
         val now = SystemClock.uptimeMillis()
         if (clipMenuOpen) {
             if (clipMenuJustOpened && event.actionMasked == MotionEvent.ACTION_UP) {
@@ -3536,8 +3545,8 @@ class DualGridView(context: Context) : View(context) {
                     } else if (state.zone == Zone.SPACE) {
                         val pxPerEraseUnit = width / sensErase
                         val dx = x - state.startX
-                        if (x <= edgeZone && dx < 0) startEdgeRepeat(id, true)
-                        else if (x >= width - edgeZone && dx > 0) startEdgeRepeat(id, false)
+                        if (edgeZone > 0f && x <= edgeZone && dx < 0) startEdgeRepeat(id, true)
+                        else if (edgeZone > 0f && x >= width - edgeZone && dx > 0) startEdgeRepeat(id, false)
                         else stopEdgeRepeat(id)
 
                         val duration = t - state.startTime

@@ -219,4 +219,6 @@
     <string name="tutorial_corrector_off_msg">Aquests passos necessiten el corrector ortogràfic, que ve desactivat per defecte.</string>
     <string name="tutorial_corrector_enable">Activa el corrector</string>
     <string name="tutorial_corrector_skip">No, ves al resum</string>
+    <string name="slider_edge_margin">Marge de vora (esborrat/refer ràpid)</string>
+    <string name="edge_margin_off">Desactivat</string>
 </resources>
