@@ -177,6 +177,13 @@ object Prefs {
         return m
     }
 
+    private const val KEY_DEMOTED = "demoted_corrections"
+    fun demoted(ctx: Context): Set<String> =
+        prefs(ctx).getStringSet(KEY_DEMOTED, emptySet()) ?: emptySet()
+    fun addDemoted(ctx: Context, pair: String) {
+        val set = demoted(ctx).toMutableSet(); set.add(pair)
+        prefs(ctx).edit().putStringSet(KEY_DEMOTED, set).apply()
+    }
     fun putLearned(ctx: Context, key: String, value: String) {
         val cur = lang(ctx)
         val m = learned(ctx).toMutableMap()
@@ -1746,12 +1753,14 @@ class DualGridView(context: Context) : View(context) {
     private var suggestions: List<String> = emptyList()
     private var pendingUndoLen = 0
     private var lastAutocorrect: Pair<String, String>? = null
+    private var undoOffer: String? = null
     private var nextWordOn = Prefs.nextWord(context)
     private var nextWordCands: List<String> = emptyList()
     private var lastCompletedWord = ""
     private val rejectedCorrections = mutableSetOf<String>()
     private var correctorOn = Prefs.corrector(context)
     private var autocorrectSpace = Prefs.autocorrectSpace(context)
+    private val demoted = Prefs.demoted(context).toMutableSet()
     private var confidenceMin = Prefs.confidence(context)
     private var undoWhole = Prefs.undoWhole(context)
     private var blacklist = Prefs.blacklist(context)
@@ -2005,6 +2014,7 @@ class DualGridView(context: Context) : View(context) {
         if (sensitiveField) { suggestions = emptyList(); clipFull = ""; return }
         val tok = currentToken()
         val low = tok.lowercase()
+        if (undoOffer != null && low != undoOffer!!.lowercase()) undoOffer = null
         val base = ArrayList<String>(3)
         if (tok.length >= 2) {
             val applied = if (autocorrectSpace) pendingTarget(tok, low) else null
@@ -2016,6 +2026,7 @@ class DualGridView(context: Context) : View(context) {
             }
             base.addAll(cands.take(3))
             if (base.isEmpty()) base.add(low)
+            undoOffer?.let { u -> if (low == u.lowercase()) { base.remove(u); base.add(0, u) } }
         } else if (tok.isEmpty()) {
             base.addAll(nextWordCands)
         }
@@ -2037,6 +2048,7 @@ class DualGridView(context: Context) : View(context) {
     }
     private fun handleBoundary(finished: String) {
         autoCapOff = false
+        undoOffer = null
         if (sensitiveField) return
         val f = finished.lowercase()
         if (f.isNotEmpty()) {
@@ -2147,9 +2159,12 @@ class DualGridView(context: Context) : View(context) {
     private fun pendingTarget(tok: String, low: String): String? {
         if (!correctorOn || !autocorrectSpace) return null
         if (tok.length < 2) return null
-        if (blacklist.contains(low) || rejectedCorrections.contains(low)) return null
+        if (blacklist.contains(low) || rejectedCorrections.contains(low) ||
+            personal.contains(low)) return null
         learned[low]?.let { if (it != low && !blacklist.contains(it)) return it }
-        return SpellEngine.autocorrectTarget(tok, confidenceMin)
+        val target = SpellEngine.autocorrectTarget(tok, confidenceMin) ?: return null
+        if (demoted.contains(low + "\t" + target)) return null
+        return target
     }
 
     private fun replaceToken(tok: String, target: String) {
@@ -2165,7 +2180,10 @@ class DualGridView(context: Context) : View(context) {
         if (undoWhole) {
             lastAutocorrect?.let { (orig, formatted) ->
                 lastAutocorrect = null
-                rejectedCorrections.add(orig)
+                rejectedCorrections.add(orig.lowercase())
+                undoOffer = orig
+                val pair = orig.lowercase() + "\t" + formatted.lowercase()
+                demoted.add(pair); Prefs.addDemoted(context, pair)
                 repeat(formatted.length + 1) { textTarget?.deleteBefore() }
                 textTarget?.commit(orig)
                 refreshSuggestions()
