@@ -44,12 +44,6 @@ corresponding feature:
 - No content from password or sensitive fields is stored or learned from.
 - No third party (including the developer) can access any of this data.
 
-## Backups
-
-The app provides no backup or export mechanism of its own. If you back up
-its private files using developer tools (adb), those copies remain entirely
-under your control.
-
 ## Changes to this policy
 
 Any change will be reflected in this file with an updated "Last updated"
