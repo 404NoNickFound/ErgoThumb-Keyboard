@@ -1,0 +1,5 @@
+Primera versión pública.
+
+- Teclado gestual de dos rejillas 3x3
+- Aprendizaje en el dispositivo y corrector ortográfico opcional
+- Historial de portapapeles, cápsula de idioma, controlador de cursor y temas

@@ -1,0 +1,5 @@
+First public release.
+
+- Dual 3x3 gesture keyboard
+- On-device learning and optional spell checker
+- Clipboard history, language capsule, cursor slider, theming

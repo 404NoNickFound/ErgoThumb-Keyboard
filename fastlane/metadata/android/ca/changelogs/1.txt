@@ -1,0 +1,5 @@
+Primera versió pública.
+
+- Teclat gestual de dues graelles 3x3
+- Aprenentatge al dispositiu i corrector ortogràfic opcional
+- Historial de portapapers, càpsula d'idioma, controlador de cursor i temes

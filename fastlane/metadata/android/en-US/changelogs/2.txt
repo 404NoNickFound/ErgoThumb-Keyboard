@@ -1,0 +1,6 @@
+Build hygiene for F-Droid.
+
+- Dictionary assets are now plain text in source
+- Removed Gradle toolchain resolver
+- Regenerated Gradle wrapper with distribution checksum
+- Added Fastlane metadata and screenshots

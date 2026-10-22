@@ -1,0 +1,6 @@
+Higiene de construcció per a F-Droid.
+
+- Els diccionaris ara són text pla al codi font
+- S'ha eliminat el resolvedor de toolchains de Gradle
+- S'ha regenerat el Gradle wrapper amb checksum de distribució
+- S'han afegit metadades Fastlane i captures de pantalla

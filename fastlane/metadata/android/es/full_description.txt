@@ -1,0 +1,14 @@
+ErgoThumb es un teclado centrado en la privacidad y pensado para los pulgares.
+
+Usa dos rejillas 3x3 con letras en ocho direcciones, una barra de sugerencias,
+aprendizaje en el dispositivo, un corrector ortográfico opcional, historial de
+portapapeles, cambio de idioma, control del cursor y temas avanzados.
+
+Privacidad:
+- Sin permisos de Android.
+- Sin código de red, analítica ni rastreadores.
+- Los datos de aprendizaje permanecen en el almacenamiento privado de la
+  aplicación y se eliminan al desinstalarla.
+
+El proyecto está licenciado bajo GPL-3.0-or-later. El código fuente, el roadmap
+y la política de privacidad están disponibles en el repositorio.

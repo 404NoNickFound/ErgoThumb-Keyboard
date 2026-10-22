@@ -4,7 +4,6 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import java.util.zip.GZIPInputStream
 
 object SpellEngine {
 
@@ -39,12 +38,7 @@ object SpellEngine {
         val bf = ArrayList<String>()
         val fq = HashMap<String, Int>()
         try {
-            val reader = try {
-                GZIPInputStream(ctx.assets.open("dicts/$code.txt.gz"))
-                    .bufferedReader(Charsets.UTF_8)
-            } catch (_: Exception) {
-                ctx.assets.open("dicts/$code.txt").bufferedReader(Charsets.UTF_8)
-            }
+            val reader = ctx.assets.open("dicts/$code.txt").bufferedReader(Charsets.UTF_8)
             reader.useLines { lines ->
                 for (line in lines) {
                     val sp = line.indexOf(' ')

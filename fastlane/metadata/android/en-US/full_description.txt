@@ -1,0 +1,13 @@
+ErgoThumb is a privacy-first keyboard designed for thumbs.
+
+It uses two 3x3 grids with eight-direction swipe letters, a suggestion strip,
+on-device learning, an optional spelling corrector, clipboard history,
+language switching, cursor control, and deep theming.
+
+Privacy:
+- No Android permissions.
+- No network code, analytics, or trackers.
+- Learning data stays in private app storage and is removed on uninstall.
+
+The project is licensed under GPL-3.0-or-later. Source code, roadmap, and
+privacy policy are available in the repository.

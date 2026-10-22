@@ -1,0 +1,14 @@
+ErgoThumb és un teclat centrat en la privacitat i pensat per als polzes.
+
+Fa servir dues graelles 3x3 amb lletres en vuit direccions, una barra de
+suggeriments, aprenentatge al dispositiu, un corrector ortogràfic opcional,
+historial de portapapers, canvi d'idioma, control del cursor i temes profunds.
+
+Privacitat:
+- Cap permís d'Android.
+- Cap codi de xarxa, analítica ni rastreadors.
+- Les dades d'aprenentatge romanen emmagatzemades de forma privada i
+  s'esborren en desinstal·lar l'aplicació.
+
+El projecte està llicenciat amb GPL-3.0-or-later. El codi font, el roadmap i
+la política de privacitat són visibles al repositori.
