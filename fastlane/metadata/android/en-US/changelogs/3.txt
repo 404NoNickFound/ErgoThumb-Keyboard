@@ -1,0 +1,4 @@
+Metadata-only release for F-Droid packaging.
+
+- Added Fastlane icon.png (512x512).
+- No user-facing changes.

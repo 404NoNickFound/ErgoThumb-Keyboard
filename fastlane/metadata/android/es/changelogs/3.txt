@@ -1,0 +1,4 @@
+Lanzamiento solo de metadatos para el empaquetado en F-Droid.
+
+- Se añadió icon.png de Fastlane (512x512).
+- Sin cambios visibles para el usuario.
